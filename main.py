@@ -21,13 +21,6 @@ from telegram.ext import (
     filters,
 )
 
-python-telegram-bot>=20.0
-fastapi
-uvicorn
-requests
-
-web: python main.py
-
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
