@@ -18,7 +18,7 @@ CAPA_PATH = "capa.jpg"  # Imagem local ou URL publica
 
 # Credenciais MisticPay
 MISTICPAY_API_URL = os.getenv("MISTICPAY_API_URL", "https://api.misticpay.com/v1")
-MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "")
+MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "ci_g35d35pglvgsj39")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
 # Inicialização da Aplicação Telegram
