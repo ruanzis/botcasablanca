@@ -1075,6 +1075,9 @@ def gerar_pix_misticpay(valor: float, telegram_id: int):
     headers = {
         "Authorization": f"Bearer {MISTICPAY_CLIENT_SECRET}",
         "Content-Type": "application/json"
+        ci: seu_client_id
+cs: seu_client_secret
+Content-Type: application/json
     }
 
     try:
