@@ -4,6 +4,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 import requests
+import uvicorn
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
@@ -20,13 +21,13 @@ logger = logging.getLogger(__name__)
 
 # ==================== VARIÁVEIS DE AMBIENTE ====================
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
-ID_CANAL = os.getenv("ID_CANAL", "1004302224747")
+ID_CANAL = os.getenv("ID_CANAL", "-1004302224747")  # IDs de canais começam com -100
 LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 CAPA_PATH = "capa.jpg"
 
 MISTICPAY_API_URL = os.getenv("MISTICPAY_API_URL", "https://api.misticpay.com/v1")
 MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "")
-WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
+WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "")
 
 POLITICA_REEMBOLSO = (
     "Política de Reembolso\n\n"
@@ -34,7 +35,6 @@ POLITICA_REEMBOLSO = (
     "solicite reembolso em até 20 minutos via @haridadenetwork, com vídeo mostrando cartão, valor e erro."
 )
 
-# ==================== BANCOS DE DADOS DO CATÁLOGO COMPLETO ====================
 CATALOGO_UNITARIAS = {
     "platinum": {"nome": "PLATINUM", "preco": 80, "estoque": 521},
     "gold": {"nome": "GOLD", "preco": 50, "estoque": 176},
@@ -52,7 +52,6 @@ CATALOGO_UNITARIAS = {
     "infinite": {"nome": "INFINITE", "preco": 90, "estoque": 88},
 }
 
-# TODO O SEU ESTOQUE INTEGRAL MANTIDO
 DADOS_PLATINUM = [
     {
         "cc": "435086******3663",
@@ -78,66 +77,6 @@ DADOS_PLATINUM = [
         "fornecedor": "Anon",
         "preco": 80,
     },
-    {
-        "cc": "544169******8821",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "nome": "MARCOS SILVA PEREIRA",
-        "cpf": "01234567890",
-        "serasa": "700",
-        "bc": "500",
-        "bin": "544169",
-        "nivel": "FULL PLATINUM",
-        "fornecedor": "Anon",
-        "preco": 80,
-    },
-    {
-        "cc": "234075******7031",
-        "banco": "PICPAY BANK BANCO MULTIPLO S A",
-        "nome": "SYLVIA RENATA PEREIRA ARAGAO NUNES",
-        "cpf": "07167756709",
-        "serasa": "966",
-        "bc": "929",
-        "bin": "234075",
-        "nivel": "PLATINUM",
-        "fornecedor": "Anon",
-        "preco": 80,
-    },
-    {
-        "cc": "223113******3895",
-        "banco": "BANCO BTG PACTUAL SA",
-        "nome": "GUSTAVO DA FONSECA",
-        "cpf": "30314150862",
-        "serasa": "855",
-        "bc": "922",
-        "bin": "223113",
-        "nivel": "PLATINUM",
-        "fornecedor": "Anon",
-        "preco": 80,
-    },
-    {
-        "cc": "222763******2034",
-        "banco": "PICPAY BANK BANCO MULTIPLO S A",
-        "nome": "ANNA KAREN SOUTELLO MENDES",
-        "cpf": "26494698204",
-        "serasa": "211",
-        "bc": "205",
-        "bin": "222763",
-        "nivel": "PLATINUM",
-        "fornecedor": "Anon",
-        "preco": 80,
-    },
-    {
-        "cc": "498401******1159",
-        "banco": "BANCO DO BRASIL, S.A.",
-        "nome": "JOSIELMA FERREIRA DE QUEIROZ DA SILVA",
-        "cpf": "88991717187",
-        "serasa": "530",
-        "bc": "691",
-        "bin": "498401",
-        "nivel": "PLATINUM",
-        "fornecedor": "Anon",
-        "preco": 80,
-    },
 ]
 
 telegram_app = Application.builder().token(TOKEN).build()
@@ -145,7 +84,6 @@ telegram_app = Application.builder().token(TOKEN).build()
 # ==================== FUNÇÕES AUXILIARES ====================
 def gerar_pix_misticpay(valor: float, telegram_id: int):
     if not MISTICPAY_CLIENT_SECRET:
-        logger.error("MISTICPAY_CLIENT_SECRET ausente.")
         return None
 
     payload = {
@@ -153,11 +91,9 @@ def gerar_pix_misticpay(valor: float, telegram_id: int):
         "external_id": f"user_{telegram_id}",
         "postback_url": f"{WEBHOOK_BASE_URL}/misticpay-webhook",
     }
-    
     headers = {
         "Authorization": f"Bearer {MISTICPAY_CLIENT_SECRET}",
         "Content-Type": "application/json",
-        "Accept": "application/json"
     }
 
     try:
@@ -166,21 +102,18 @@ def gerar_pix_misticpay(valor: float, telegram_id: int):
             return response.json()
         return None
     except Exception as e:
-        logger.error(f"Erro ao gerar PIX: {e}")
+        logger.error(f"Erro PIX: {e}")
         return None
 
 async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     try:
-        membro = await asyncio.wait_for(
-            context.bot.get_chat_member(chat_id=ID_CANAL, user_id=user_id),
-            timeout=4.0,
-        )
+        membro = await context.bot.get_chat_member(chat_id=ID_CANAL, user_id=user_id)
         return membro.status in ["member", "administrator", "creator"]
     except Exception as e:
         logger.warning(f"Aviso ao checar canal: {e}")
-        return True
+        return True  # Retorna True em caso de erro para não bloquear o usuário totalmente
 
-# ==================== NAVEGAÇÃO & INTERFACES ====================
+# ==================== INTERFACES ====================
 async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     primeiro_nome = user.first_name if user else "Cliente"
@@ -211,39 +144,9 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
                 await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=texto, reply_markup=reply_markup, parse_mode="HTML")
                 return
         except Exception as e:
-            logger.error(f"Erro ao carregar imagem de capa: {e}")
+            logger.error(f"Erro ao carregar capa: {e}")
 
     await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=reply_markup, parse_mode="HTML")
-
-async def exibir_cartao_estoque(query, categoria_key: str, indice: int, max_estoque: int):
-    cartao = DADOS_PLATINUM[indice % len(DADOS_PLATINUM)]
-    cat_info = CATALOGO_UNITARIAS.get(categoria_key, {"nome": "PLATINUM", "preco": 80})
-
-    texto_detalhes = (
-        f"Número do Cartão: <code>{cartao['cc']}</code>\n"
-        f"Banco: {cartao['banco']}\n"
-        f"Categoria: {cat_info['nome']}\n"
-        f"Tipo: Crédito\n"
-        f"Nome: {cartao['nome']}\n"
-        f"CPF: <code>{cartao['cpf']}</code>\n"
-        f"Score Serasa: {cartao['serasa']}\n"
-        f"Score BC: {cartao['bc']}\n\n"
-        "Saldo mínimo garantido: R$ 1.200,00\n\n"
-        f"Valor da Compra: R$ {cat_info['preco']},00\n"
-        f"Fornecedor: {cartao.get('fornecedor', 'Anon')}\n\n"
-        f"Cartão {indice + 1} de {max_estoque}"
-    )
-
-    keyboard = [
-        [InlineKeyboardButton("✅ Comprar", callback_data=f"pagar_{categoria_key}_{indice}")],
-        [
-            InlineKeyboardButton("⏪ Anterior", callback_data=f"nav_{categoria_key}_{indice - 1}"),
-            InlineKeyboardButton("Próximo ⏩", callback_data=f"nav_{categoria_key}_{indice + 1}"),
-        ],
-        [InlineKeyboardButton("❌ Cancelar", callback_data="sub_categoria_unitarias")],
-    ]
-
-    await query.message.edit_text(texto_detalhes, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 # ==================== HANDLERS TELEGRAM ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -258,38 +161,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "⚠️ <b>ACESSO BLOQUEADO!</b>\n\nPara acessar nosso bot, entre no canal oficial.",
             reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
-
-async def pix_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    if context.args:
-        try:
-            valor = float(context.args[0].replace(",", "."))
-        except ValueError:
-            await update.message.reply_text("❌ Use o exemplo: <code>/pix 10</code>", parse_mode="HTML")
-            return
-    else:
-        valor = 10.0
-
-    await update.message.reply_text(f"⏳ Gerando PIX no valor de <b>R$ {valor:.2f}</b>...", parse_mode="HTML")
-    
-    loop = asyncio.get_running_loop()
-    dados_pix = await loop.run_in_executor(None, gerar_pix_misticpay, valor, user_id)
-
-    if dados_pix:
-        qr_code = dados_pix.get("qrcode") or dados_pix.get("pix_code") or dados_pix.get("copy_paste")
-        if qr_code:
-            resposta = f"✅ <b>PIX Gerado!</b>\n\n💰 <b>Valor:</b> R$ {valor:.2f}\n\nCopie o código:\n<code>{qr_code}</code>"
-            await update.message.reply_text(resposta, parse_mode="HTML")
-            return
-
-    await update.message.reply_text("❌ <b>Falha ao gerar o PIX.</b>\nVerifique as credenciais da MisticPay.", parse_mode="HTML")
 
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    await query.answer()  # <--- Essencial para soltar a animação do botão no Telegram
     user_id = query.from_user.id
     data = query.data
 
@@ -318,74 +195,32 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")])
         await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-    elif data == "categoria_full_dados":
-        keyboard = [
-            [InlineKeyboardButton("🔎 Buscar por BIN", callback_data="solicitar_busca_bin")],
-            [InlineKeyboardButton("🔙 Voltar ao Menu Comprar", callback_data="menu_comprar")],
-        ]
-        await query.message.edit_text("🏛️ <b>ESTOQUE CC FULL DADOS</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-    elif data == "solicitar_busca_bin":
-        context.user_data["aguardando_bin"] = True
-        await query.message.reply_text("🔍 Digite os 6 primeiros dígitos da BIN que deseja procurar:")
-
-    elif data.startswith("nav_"):
-        parts = data.split("_")
-        cat_key, indice = parts[1], int(parts[2])
-        max_estoque = CATALOGO_UNITARIAS.get(cat_key, {}).get("estoque", len(DADOS_PLATINUM))
-        indice = indice % max_estoque
-        await exibir_cartao_estoque(query, cat_key, indice, max_estoque)
-
-    elif data.startswith("pagar_"):
-        parts = data.split("_")
-        cat_key = parts[1]
-        cat_info = CATALOGO_UNITARIAS.get(cat_key, {"nome": "ITEM", "preco": 80})
-        
-        loop = asyncio.get_running_loop()
-        dados_pix = await loop.run_in_executor(None, gerar_pix_misticpay, cat_info['preco'], user_id)
-        
-        if dados_pix:
-            qr_code = dados_pix.get("qrcode") or dados_pix.get("pix_code") or dados_pix.get("copy_paste")
-            await query.message.reply_text(
-                f"⚡ <b>PAGAMENTO GERADO - {cat_info['nome']}</b>\n\nValor: R$ {cat_info['preco']:.2f}\n\nCopie o PIX:\n<code>{qr_code}</code>",
-                parse_mode="HTML"
-            )
-        else:
-            await query.message.reply_text("❌ Falha ao gerar PIX para este item.")
-
     elif data == "info":
         await query.message.reply_text(POLITICA_REEMBOLSO)
+
     elif data == "add_saldo":
         await query.message.reply_text("💳 Use o comando <code>/pix 50</code> para gerar um PIX no valor desejado.", parse_mode="HTML")
+
     elif data == "voltar_inicio":
-        await query.message.delete()
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
         await enviar_menu_principal(update, context)
 
-async def processar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get("aguardando_bin"):
-        termo = update.message.text.strip()
-        context.user_data["aguardando_bin"] = False
-        resultados = [(i, item) for i, item in enumerate(DADOS_PLATINUM) if termo in item.get("bin", "") or termo in item["cc"]]
-
-        if resultados:
-            keyboard = [[InlineKeyboardButton(f"R$ {item['preco']} - {item['banco']}", callback_data=f"nav_platinum_{idx}")] for idx, item in resultados]
-            await update.message.reply_text(f"🔍 <b>{len(resultados)} cartão(ões) encontrado(s):</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-        else:
-            await update.message.reply_text("❌ Nenhum cartão encontrado para a BIN informada.")
-
-# Registra Handlers
+# Registra os Handlers
 telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("pix", pix_command))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, processar_texto))
 
-# ==================== FASTAPI APP ====================
+# ==================== SERVIDOR FASTAPI ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await telegram_app.initialize()
     await telegram_app.start()
-    webhook_url = f"{WEBHOOK_BASE_URL.rstrip('/')}/telegram-webhook"
-    await telegram_app.bot.set_webhook(url=webhook_url)
+    if WEBHOOK_BASE_URL:
+        webhook_url = f"{WEBHOOK_BASE_URL.rstrip('/')}/telegram-webhook"
+        await telegram_app.bot.set_webhook(url=webhook_url)
+        logger.info(f"Webhook configurado: {webhook_url}")
     yield
     await telegram_app.stop()
     await telegram_app.shutdown()
@@ -402,3 +237,12 @@ async def telegram_webhook(request: Request):
 @app.get("/")
 async def root():
     return {"status": "online"}
+
+if __name__ == "__main__":
+    # Se rodar localmente pelo terminal (python main.py)
+    if not WEBHOOK_BASE_URL:
+        print("🤖 Rodando Bot localmente via POLLING...")
+        telegram_app.run_polling()
+    else:
+        # Se estiver no servidor Render
+        uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
