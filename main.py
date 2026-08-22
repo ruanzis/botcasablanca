@@ -1,2299 +1,299 @@
-importar assínpio
-
-Registro de importação
-
-Importação de SO
-
-Solicitações de importação
-
+import asyncio
+import logging
+import os
+import requests
 from fastapi import FastAPI, Request, HTTPException
-
-Do Contextlib Import AsyncContextManager
-
-Da importação do Telegram (
-
-    InlineKeyboardButton,
-
-Marcação InlineKeyboard,
-
-ArtigoInlineQueryResult,
-
-ConteúdoTextoTextoConteúdo,
-
-Atualização,
-
-)
-
-do telegram.ext importado (
-
-Aplicação,
-
+from contextlib import asynccontextmanager
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (
+    Application,
     CallbackQueryHandler,
-
-HandlerCommand,
-
+    CommandHandler,
     ContextTypes,
-
-    InlineQueryHandler,
-
-HandlerMessage,
-
-filtros,
-
 )
-
-
 
 # Configuração de Logs
-
 logging.basicConfig(level=logging.INFO)
-
 logger = logging.getLogger(__name__)
 
-
-
 # ==================== CONFIGURAÇÕES GERAIS ====================
-
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
-
-ID_CANAL = -1004302224747
-
 LINK_CANAL = "https://t.me/+qrh5SObhV3xmODhh"
-
 NOME_FOTO = "capa.jpg"
 
-FOTO_CATEGORIAS = "categorias.jpg"
-
-
-
 # CONFIGURAÇÕES MISTICPAY
-
-MISTICPAY_API_URL = "https://api.misticpay.com/v1"  # Ajuste conforme a documentação oficial MisticPay
-
-MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
-
+MISTICPAY_API_URL = "https://api.misticpay.com/v1"
 MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc1syoymxugk3h")
-
 WEBHOOK_BASE_URL = "https://botcasablanca.onrender.com"
 
-
-
 POLITICA_REEMBOLSO = (
-
-" 📜 *Política de Reembolso*\n\n"
-
-" ⚠️ Caso o saldo esteja abaixo do mínimo garantido na pré-compra, "
-
-    "solicite reembolso em até 20 minutos via @haridadenetwork, com vídeo mostrando cartão, valor e erro."
-
+    "📜 *Política de Reembolso*\n\n"
+    "⚠️ Caso o saldo esteja abaixo do mínimo garantido na pré-compra, "
+    "solicite reembolso em até 20 minutos via @SOSAtendimento, com vídeo mostrando cartão, valor e erro."
 )
 
+# Banco de dados temporário de saldo em memória (telegram_id: valor)
+SALDOS_USUARIOS = {}
 
-
-# ==================== ESTOQUES DE UNITÁRIAS (CATÁLOGO) ====================
-
+# ==================== DADOS DOS CATÁLOGOS ====================
 CATALOGO_UNITARIAS = {
-
-    "platinum": {"nome": "PLATINUM", "preco": "R$ 80", "estoque": 565},
-
-    "gold": {"nome": "GOLD", "preco": "R$ 50", "estoque": 176},
-
-    "personal": {"nome": "PERSONAL", "preco": "R$ 50", "estoque": 55},
-
-    "business": {"nome": "BUSINESS", "preco": "R$ 80", "estoque": 162},
-
-    "elo": {"nome": "ELO", "preco": "R$ 50", "estoque": 24},
-
-    "black": {"nome": "BLACK", "preco": "R$ 120", "estoque": 118},
-
-    "personal_plat_charge": {
-
-        "nome": "PERSONAL PLATINUM CHARGE",
-
-        "preco": "R$ 120",
-
-        "estoque": 34,
-
-    },
-
-    "personal_gold_charge": {
-
-        "nome": "PERSONAL GOLD CHARGE",
-
-        "preco": "R$ 120",
-
-        "estoque": 14,
-
-    },
-
-    "signature": {"nome": "SIGNATURE", "preco": "R$ 80", "estoque": 6},
-
-    "nubank_gold": {"nome": "NUBANK GOLD", "preco": "R$ 35", "estoque": 526},
-
-    "nubank_plat": {"nome": "NUBANK PLATINUM", "preco": "R$ 40", "estoque": 441},
-
-    "classic": {"nome": "CLASSIC", "preco": "R$ 30", "estoque": 201},
-
-    "standard": {"nome": "STANDARD", "preco": "R$ 20", "estoque": 104},
-
-    "infinite": {"nome": "INFINITE", "preco": "R$ 90", "estoque": 88},
-
+    "platinum": {"nome": "PLATINUM", "preco_num": 80.0, "preco": "R$ 80", "estoque": 526},
+    "personal": {"nome": "PERSONAL", "preco_num": 50.0, "preco": "R$ 50", "estoque": 55},
+    "gold": {"nome": "GOLD", "preco_num": 50.0, "preco": "R$ 50", "estoque": 175},
+    "elo": {"nome": "ELO", "preco_num": 50.0, "preco": "R$ 50", "estoque": 1},
+    "business": {"nome": "BUSINESS", "preco_num": 80.0, "preco": "R$ 80", "estoque": 16},
+    "infinite": {"nome": "INFINITE", "preco_num": 120.0, "preco": "R$ 120", "estoque": 418},
+    "black": {"nome": "BLACK", "preco_num": 120.0, "preco": "R$ 120", "estoque": 114},
+    "personal_plat_charge": {"nome": "PERSONAL PLATINUM C...", "preco_num": 120.0, "preco": "R$ 120", "estoque": 34},
+    "personal_gold_charge": {"nome": "PERSONAL GOLD CHARG...", "preco_num": 120.0, "preco": "R$ 120", "estoque": 14},
+    "corporate_te": {"nome": "CORPORATE T&E", "preco_num": 80.0, "preco": "R$ 80", "estoque": 172},
+    "signature": {"nome": "SIGNATURE", "preco_num": 80.0, "preco": "R$ 80", "estoque": 3},
+    "purchasing": {"nome": "PURCHASING", "preco_num": 80.0, "preco": "R$ 80", "estoque": 7},
+    "nubank_gold": {"nome": "NUBANK GOLD", "preco_num": 35.0, "preco": "R$ 35", "estoque": 610},
+    "nubank_plat": {"nome": "NUBANK PLATINUM", "preco_num": 40.0, "preco": "R$ 40", "estoque": 410},
 }
 
-
-
-# Base de Dados Completa para Navegação e Pesquisa por BIN
-
-DADOS_PLATINUM = [
-
-    {
-
-        "cc": "542819******0150",
-
-        "banco": "BANCO GENIAL SA",
-
-        "nome": "CRISTIANO CACHEIRO MAHIA",
-
-        "cpf": "03250698679",
-
-        "serasa": "306",
-
-        "bc": "93",
-
-        "bin": "542819",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "234075******8043",
-
-        "banco": "PICPAY BANK BANCO MULTIPLO S A",
-
-        "nome": "IGOR TIAGO MIRANDA DA SILVA",
-
-        "cpf": "33258607885",
-
-        "serasa": "966",
-
-        "bc": "929",
-
-        "bin": "234075",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "223357******5915",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "VERA LUCIA DE FATIMA FANTI DE ALMEIDA",
-
-        "cpf": "30441013104",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "223357",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "537363******9016",
-
-        "banco": "BANCO BRADESCARD, S.A.",
-
-        "nome": "JOELCIO CRUZ PAIVA",
-
-        "cpf": "00033482705",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "537363",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "538164******4290",
-
-        "banco": "BANCO C6 SA",
-
-        "nome": "CRISTINA PALOMA DOS SANTOS",
-
-        "cpf": "00607587164",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "538164",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "223357******7766",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "JHULIANA SANTOS SOUSA",
-
-        "cpf": "04365806599",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "223357",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "223357******1054",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "CARLOS HEITOR MIRANDA DE FARIA",
-
-        "cpf": "00754048772",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "223357",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "470598******9086",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "PERICLES JOSE LUIZ DA SILVA",
-
-        "cpf": "62510029800",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "470598",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "470598******8023",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "ALEXANDER BATISTA DOS SANTOS",
-
-        "cpf": "81820585115",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "470598",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "498401******1159",
-
-        "banco": "BANCO DO BRASIL, S.A.",
-
-        "nome": "JOSIELMA FERREIRA DE QUEIROZ DA SILVA",
-
-        "cpf": "88991717187",
-
-        "serasa": "530",
-
-        "bc": "691",
-
-        "bin": "498401",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "478308******6554",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "NATHALYA MOREIRA DA SILVA FERREIRA",
-
-        "cpf": "05920033452",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "478308",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "489391******5380",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "SOLANGE MARIA COSTA BRAGA ABBONDANZA",
-
-        "cpf": "19665342304",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "489391",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "552937******7622",
-
-        "banco": "CAIXA ECONOMICA FEDERAL",
-
-        "nome": "JOAO GLEDSON RIBEIRO MARTINS",
-
-        "cpf": "65471520149",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "552937",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "514945******5094",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "ARTHUR ALVARENGA GENZ",
-
-        "cpf": "47044182860",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "514945",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "414506******0191",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "EDUARDO COLARES LISBOA",
-
-        "cpf": "94228540597",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "414506",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "531681******1081",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "CARLOSNAICK GONCALVES DE SOUZA",
-
-        "cpf": "31280862734",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "531681",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "470598******3596",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "PAULO FERNANDO HORMAIN",
-
-        "cpf": "40689662068",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "470598",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "470598******1266",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "SERGIO LUIS SIQUEIRA DE SOUZA",
-
-        "cpf": "41585402087",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "470598",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "531681******0678",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "JANAINA MAHENDRA CAMARA ESPINDOLA",
-
-        "cpf": "97046159149",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "531681",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "544169******0487",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "ALEXANDRE CARVALHO CHANAN",
-
-        "cpf": "18319050006",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "544169",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "514945******0971",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "ANDRE FELIPE CANDIDO DA SILVA",
-
-        "cpf": "33660002879",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "514945",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "470598******5141",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "ALESSANDRO FERNANDES GOMES PEREIRA",
-
-        "cpf": "11257194780",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "470598",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "498401******6687",
-
-        "banco": "BANCO DO BRASIL, S.A.",
-
-        "nome": "JEFERSON MOURA ALBUQUERQUE",
-
-        "cpf": "02782109537",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "498401",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "498401******6977",
-
-        "banco": "BANCO DO BRASIL, S.A.",
-
-        "nome": "GIOVANI PERDONATE DOS SANTOS",
-
-        "cpf": "05228787763",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "498401",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "530049******3398",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "CHRISTIANNE ELIZA CARDINALI DE ASSIS RIBEIRO",
-
-        "cpf": "04434522612",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "530049",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "498401******8835",
-
-        "banco": "BANCO DO BRASIL, S.A.",
-
-        "nome": "JOAO CARLOS GONCALVES",
-
-        "cpf": "83222103887",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "498401",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "514945******3090",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "DALMO DE PAULA FREITAS SERPA",
-
-        "cpf": "26145758791",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "514945",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "531681******4646",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "REINALDO LIBERO CERON",
-
-        "cpf": "85483010825",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "531681",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "414506******8345",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "WAGNER GONCALVES DE SOUZA TRASEL",
-
-        "cpf": "00423225022",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "414506",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "489167******6213",
-
-        "banco": "BANCO COOPERATIVO SICREDI, S.A.",
-
-        "nome": "RICARDO DA SILVA ALVES",
-
-        "cpf": "38223279304",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "489167",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "514895******7810",
-
-        "banco": "BANCO DO BRASIL, S.A.",
-
-        "nome": "RAMONA DE FATIMA RIBEIRO DE OLIVEIRA",
-
-        "cpf": "42075335168",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "514895",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "498401******4560",
-
-        "banco": "BANCO DO BRASIL, S.A.",
-
-        "nome": "ELIANDRO GABRIEL DOS REIS",
-
-        "cpf": "99708213691",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "498401",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "415275******5226",
-
-        "banco": "PORTOSEG S.A.",
-
-        "nome": "EDSON PIZATO",
-
-        "cpf": "03142986901",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "415275",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "415275******5512",
-
-        "banco": "PORTOSEG S.A.",
-
-        "nome": "PAULO RICARDO PEREIRA LAGOS",
-
-        "cpf": "04901539922",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "415275",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "470598******6146",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "SHEYLLA KELLY ESTEVAO SOARES",
-
-        "cpf": "93901968172",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "470598",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "470598******1574",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "EDSON FERREIRA DE LIMA",
-
-        "cpf": "09705104387",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "470598",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "531681******5482",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "CRISTIANE PATRICIA DA SILVA NUNES",
-
-        "cpf": "35550271826",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "531681",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "531681******1774",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "GISELE NUNES DOS SANTOS",
-
-        "cpf": "82334692115",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "531681",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "532930******9111",
-
-        "banco": "PORTOSEG S.A.",
-
-        "nome": "MARIA SANTOS DE BRITO",
-
-        "cpf": "02393475958",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "532930",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "498401******5247",
-
-        "banco": "BANCO DO BRASIL, S.A.",
-
-        "nome": "ISABEL NOEMI CAMPOS REIS",
-
-        "cpf": "51412632587",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "498401",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "514945******4857",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "ANTONIA R DA SILVA",
-
-        "cpf": "94919127987",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "514945",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "523431******2193",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "LUIS EDUARDO TANGER FAGUNDES",
-
-        "cpf": "92066810010",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "523431",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "516291******3785",
-
-        "banco": "ITAU UNIBANCO, S.A.",
-
-        "nome": "EDUARDO MACIEL DE SOUSA NETO",
-
-        "cpf": "81412363268",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "516291",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "498401******8439",
-
-        "banco": "BANCO DO BRASIL, S.A.",
-
-        "nome": "PATRICIA BAPTISTA TEIXEIRA",
-
-        "cpf": "35670274334",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "498401",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "532930******7118",
-
-        "banco": "PORTOSEG S.A.",
-
-        "nome": "MARCOS ALEXANDRE MARTINS GABRIEL",
-
-        "cpf": "52223426204",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "532930",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "554927******1985",
-
-        "banco": "BANCO DO BRASIL, S.A.",
-
-        "nome": "SILVIA SOUZA SANTOS",
-
-        "cpf": "87921740944",
-
-        "serasa": "500",
-
-        "bc": "500",
-
-        "bin": "554927",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "80,00",
-
-    },
-
-    {
-
-        "cc": "550209******9253",
-
-        "banco": "NUBANK",
-
-        "nome": "PAULO ARTHUR BENDELAK ROCHA",
-
-        "cpf": "51666944220",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******6565",
-
-        "banco": "NUBANK",
-
-        "nome": "TATIANE GONCALVES DE ABREU",
-
-        "cpf": "10767301757",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******8675",
-
-        "banco": "NUBANK",
-
-        "nome": "ANTONIA LIDIANA SILVA DOS SANTOS CRUZ",
-
-        "cpf": "03359473442",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******7960",
-
-        "banco": "NUBANK",
-
-        "nome": "SARA CALISTO ALVES",
-
-        "cpf": "07059943331",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******9403",
-
-        "banco": "NUBANK",
-
-        "nome": "WILIAN SANTOS VELOSO",
-
-        "cpf": "50453606806",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******0542",
-
-        "banco": "NUBANK",
-
-        "nome": "LEVI STROPARO",
-
-        "cpf": "13921920990",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******0857",
-
-        "banco": "NUBANK",
-
-        "nome": "JOAO PEDRO AZEVEDO COSTA SOUZA",
-
-        "cpf": "70644030488",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******6958",
-
-        "banco": "NUBANK",
-
-        "nome": "LUZIA ROSEMIRIA GOMES DE ALCANTARA SOUZA",
-
-        "cpf": "23532319187",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******2536",
-
-        "banco": "NUBANK",
-
-        "nome": "CLARICE MARQUES DE ALMEIDA DE CARVALHO",
-
-        "cpf": "79071430120",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******5534",
-
-        "banco": "NUBANK",
-
-        "nome": "FABIANA LUXEMBURG BARROSO CAVALCANTE",
-
-        "cpf": "61581178204",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******3975",
-
-        "banco": "NUBANK",
-
-        "nome": "REINALDO EMANOEL DA COSTA GAIA",
-
-        "cpf": "30594049253",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******8163",
-
-        "banco": "NUBANK",
-
-        "nome": "KAINAN ALVES ANTUNES BAHIA",
-
-        "cpf": "01857829573",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******2594",
-
-        "banco": "NUBANK",
-
-        "nome": "MARIA JOSE MENDONCA SALES",
-
-        "cpf": "54810124800",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******0082",
-
-        "banco": "NUBANK",
-
-        "nome": "MARIA DA GUIA CARDEAL DOS SANTOS",
-
-        "cpf": "22159292869",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******8526",
-
-        "banco": "NUBANK",
-
-        "nome": "REGINA LAURA CAMPOS BOTELHO",
-
-        "cpf": "63672111953",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******2586",
-
-        "banco": "NUBANK",
-
-        "nome": "MONIQUE TEIXEIRA NASCIMENTO",
-
-        "cpf": "13052023764",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******8171",
-
-        "banco": "NUBANK",
-
-        "nome": "SHEILA CARDOSO PASSOS",
-
-        "cpf": "82615047191",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******0539",
-
-        "banco": "NUBANK",
-
-        "nome": "FABIO MAGALHAES DIAS",
-
-        "cpf": "17731924858",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******1291",
-
-        "banco": "NUBANK",
-
-        "nome": "THAWANY DA ROCHA NUNES",
-
-        "cpf": "13325122400",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******5371",
-
-        "banco": "NUBANK",
-
-        "nome": "SHEILA NUNES DE SOUZA CASTRO",
-
-        "cpf": "96820110600",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******9695",
-
-        "banco": "NUBANK",
-
-        "nome": "BEATRIZ DE OLIVEIRA ARAUJO",
-
-        "cpf": "42444977300",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******8003",
-
-        "banco": "NUBANK",
-
-        "nome": "CLEUZENI DE PAULO FELIX",
-
-        "cpf": "97463094634",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******8975",
-
-        "banco": "NUBANK",
-
-        "nome": "CRISTIAN ANTONIO PALMA PONCE",
-
-        "cpf": "05815386685",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******3432",
-
-        "banco": "NUBANK",
-
-        "nome": "PEDRO VINICIUS DOS SANTOS FERREIRA",
-
-        "cpf": "05789319742",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "550209******8651",
-
-        "banco": "NUBANK",
-
-        "nome": "CRISTIANO RAFAEL PRIEBE",
-
-        "cpf": "02939596921",
-
-        "serasa": "350",
-
-        "bc": "350",
-
-        "bin": "550209",
-
-        "nivel": "GOLD",
-
-        "fornecedor": "Anon",
-
-        "preco": "35,00",
-
-    },
-
-    {
-
-        "cc": "516292******1792",
-
-        "banco": "NUBANK",
-
-        "nome": "ALEXANDRE MAGNO DE CARVALHO SANTOS",
-
-        "cpf": "42901502172",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-    {
-
-        "cc": "516292******7103",
-
-        "banco": "NUBANK",
-
-        "nome": "MARIA ERIVAN DE SOUSA FELIPE",
-
-        "cpf": "80324754353",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-    {
-
-        "cc": "516292******2050",
-
-        "banco": "NUBANK",
-
-        "nome": "MARIA ELIENE CAVALCANTE GUIMARAES",
-
-        "cpf": "02476984400",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-    {
-
-        "cc": "516292******3580",
-
-        "banco": "NUBANK",
-
-        "nome": "IVANA LIVIA DE PAIVA CORREA",
-
-        "cpf": "41472858808",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-    {
-
-        "cc": "516292******4144",
-
-        "banco": "NUBANK",
-
-        "nome": "CARLA ADRIANA FERREIRA PEREIRA",
-
-        "cpf": "50119249120",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-    {
-
-        "cc": "516292******5221",
-
-        "banco": "NUBANK",
-
-        "nome": "MIRIAM DE JESUS GUEDES DE SOUZA",
-
-        "cpf": "43179053453",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-    {
-
-        "cc": "516292******5068",
-
-        "banco": "NUBANK",
-
-        "nome": "RAFAELA GONCALVES PAZZINI VIANNA",
-
-        "cpf": "25220410881",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-    {
-
-        "cc": "516292******6643",
-
-        "banco": "NUBANK",
-
-        "nome": "GUSTAVO FERNANDO CARDOSO PINO",
-
-        "cpf": "38387303801",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-    {
-
-        "cc": "516292******3285",
-
-        "banco": "NUBANK",
-
-        "nome": "AUGUSTO WEBER ZAMBRANO",
-
-        "cpf": "00682540080",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-    {
-
-        "cc": "516292******9612",
-
-        "banco": "NUBANK",
-
-        "nome": "ANGELINA SADOVSKI VAZQUEZ",
-
-        "cpf": "05546870974",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-    {
-
-        "cc": "516292******9198",
-
-        "banco": "NUBANK",
-
-        "nome": "FERNANDO CARNEIRO MENEZES",
-
-        "cpf": "83362886604",
-
-        "serasa": "400",
-
-        "bc": "400",
-
-        "bin": "516292",
-
-        "nivel": "PLATINUM",
-
-        "fornecedor": "Anon",
-
-        "preco": "40,00",
-
-    },
-
-]
-
-
-
-# Inicialização Global da Aplicação Telegram
-
+CATALOGO_ESIM = {
+    "esim_vivo": {"nome": "eSIM VIVO", "preco_num": 45.0, "preco": "R$ 45", "estoque": 12},
+    "esim_claro": {"nome": "eSIM CLARO", "preco_num": 45.0, "preco": "R$ 45", "estoque": 8},
+    "esim_tim": {"nome": "eSIM TIM", "preco_num": 45.0, "preco": "R$ 45", "estoque": 15},
+}
+
+CATALOGO_AUXILIAR = {
+    "consultas": {"nome": "CONSULTA COMPLETA", "preco_num": 15.0, "preco": "R$ 15", "estoque": 99},
+    "score": {"nome": "AUMENTO DE SCORE", "preco_num": 100.0, "preco": "R$ 100", "estoque": 5},
+}
+
+# Inicialização do Bot
 telegram_app = Application.builder().token(TOKEN).build()
 
-
-
-# ==================== UTILITÁRIOS DA MISTICPAY ====================
-
-def gerar_pix_misticpay(valor: float, telegram_id: int):
-
-    """
-
-    Função para fazer a requisição de pagamento via MisticPay.
-
-    """
-
-    payload = {
-
-        "amount": valor,
-
-        "external_id": f"user_{telegram_id}",
-
-        "postback_url": f"{WEBHOOK_BASE_URL}/misticpay-webhook",
-
-    }
-
-    
-
-    headers = {
-
-        "Authorization": f"Bearer {MISTICPAY_CLIENT_SECRET}",
-
-        "Content-Type": "application/json"
-
-    }
-
-
-
-    try:
-
-        response = requests.post(f"{MISTICPAY_API_URL}/pix/charge", json=payload, headers=headers, timeout=10)
-
-        if response.status_code in [200, 201]:
-
-            return response.json()
-
-        else:
-
-            logger.error(f"Erro MisticPay: {response.status_code} - {response.text}")
-
-            return None
-
-    except Exception as e:
-
-        logger.error(f"Falha ao conectar com MisticPay: {e}")
-
-        return None
-
-
-
-# Checagem de canal protegida contra travamentos
-
-async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
-
-    try:
-
-        membro = await asyncio.wait_for(
-
-            context.bot.get_chat_member(chat_id=ID_CANAL, user_id=user_id),
-
-            timeout=4.0,
-
+async def enviar_com_foto_se_existir(chat_id, context, texto, reply_markup):
+    if os.path.exists(NOME_FOTO):
+        with open(NOME_FOTO, "rb") as foto:
+            await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=foto,
+                caption=texto,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+    else:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=texto,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
         )
 
-        return membro.status in ["member", "administrator", "creator"]
-
-    except Exception as e:
-
-        logger.warning(f"Aviso ao checar canal: {e}")
-
-        return True
-
-
-
-# ==================== PAINEL PRINCIPAL & MENUS ====================
-
+# ==================== MENU PRINCIPAL ====================
 async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     user = update.effective_user
-
     primeiro_nome = user.first_name if user else "Cliente"
+    chat_id = update.effective_chat.id
+    user_id = user.id if user else 0
 
+    saldo_atual = SALDOS_USUARIOS.get(user_id, 0.0)
 
+    if update.callback_query:
+        await update.callback_query.answer()
 
     texto = (
-
         f"Olá *{primeiro_nome}*, seja bem-vindo ao *CasaBlanca Bot*! 🏛️✨\n\n"
-
-        "Selecione uma opção abaixo para navegar pelo nosso catálogo:"
-
+        f"💰 *Seu Saldo:* R$ {saldo_atual:.2f}\n\n"
+        "Selecione uma opção abaixo para navegar:"
     )
 
-
-
     keyboard = [
-
         [
-
-            InlineKeyboardButton("🛒 Comprar", callback_data="menu_comprar"),
-
-            InlineKeyboardButton("ℹ️ Informações", callback_data="info"),
-
+            InlineKeyboardButton("🛒 Comprar", callback_data="menu_categorias"),
+            InlineKeyboardButton("💳 Adicionar Saldo", callback_data="add_saldo"),
         ],
-
         [
-
             InlineKeyboardButton("🛠️ Ferramentas", callback_data="ferramentas"),
-
             InlineKeyboardButton("🎁 Indicações", callback_data="indicacoes"),
-
         ],
-
-        [
-
-            InlineKeyboardButton("💳 Adicionar Saldo", callback_data="add_saldo")
-
-        ],
-
+        [InlineKeyboardButton("ℹ️ Informações", callback_data="info")],
         [InlineKeyboardButton("📢 Canal Oficial", url=LINK_CANAL)],
-
     ]
-
-
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    if update.callback_query:
+        try:
+            await update.callback_query.message.edit_text(texto, reply_markup=reply_markup, parse_mode="Markdown")
+        except Exception:
+            await enviar_com_foto_se_existir(chat_id, context, texto, reply_markup)
+    else:
+        await enviar_com_foto_se_existir(chat_id, context, texto, reply_markup)
 
+# ==================== ADICIONAR SALDO (PIX) ====================
+async def exibir_opcao_add_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query:
+        await query.answer()
 
-    try:
+    user_id = update.effective_user.id
+    saldo_atual = SALDOS_USUARIOS.get(user_id, 0.0)
 
-        if os.path.exists(NOME_FOTO):
+    texto = (
+        f"💳 *Adicionar Saldo via PIX*\n\n"
+        f"💰 *Saldo Atual:* R$ {saldo_atual:.2f}\n\n"
+        "Escolha um valor para recarregar sua carteira:"
+    )
 
-            with open(NOME_FOTO, "rb") as foto:
+    keyboard = [
+        [
+            InlineKeyboardButton("R$ 15", callback_data="pix_15"),
+            InlineKeyboardButton("R$ 35", callback_data="pix_35"),
+            InlineKeyboardButton("R$ 50", callback_data="pix_50"),
+        ],
+        [
+            InlineKeyboardButton("R$ 80", callback_data="pix_80"),
+            InlineKeyboardButton("R$ 100", callback_data="pix_100"),
+            InlineKeyboardButton("R$ 120", callback_data="pix_120"),
+        ],
+        [InlineKeyboardButton("🔙 Voltar ao Menu Principal", callback_data="menu_principal")]
+    ]
 
-                if update.callback_query:
+    await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
-                    await update.callback_query.message.reply_photo(
+# ==================== CATEGORIAS & CATÁLOGO (2 COLUNAS) ====================
+async def exibir_menu_categorias(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query:
+        await query.answer()
 
-                        photo=foto,
+    texto = "📂 *Selecione uma Categoria de Produtos:*"
 
-                        caption=texto,
+    keyboard = [
+        [InlineKeyboardButton("💳 CC Full Dados", callback_data="cat_ccfulldados")],
+        [InlineKeyboardButton("📱 eSIM", callback_data="cat_esim")],
+        [InlineKeyboardButton("🛠️ Auxiliar / Outros", callback_data="cat_auxiliar")],
+        [InlineKeyboardButton("🔙 Voltar ao Menu Principal", callback_data="menu_principal")]
+    ]
 
-                        reply_markup=reply_markup,
+    await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
-                        parse_mode="Markdown",
+async def exibir_catalogo_especifico(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query:
+        await query.answer()
 
-                    )
+    categoria = query.data.replace("cat_", "")
+    
+    if categoria == "ccfulldados":
+        dados_catalogo = CATALOGO_UNITARIAS
+        titulo = "💳 *Catálogo CC Full Dados*"
+    elif categoria == "esim":
+        dados_catalogo = CATALOGO_ESIM
+        titulo = "📱 *Catálogo eSIM*"
+    elif categoria == "auxiliar":
+        dados_catalogo = CATALOGO_AUXILIAR
+        titulo = "🛠️ *Serviços Auxiliares*"
+    else:
+        dados_catalogo = {}
+        titulo = "Catálogo"
 
-                else:
+    keyboard = []
+    linha_atual = []
 
-                    await update.message.reply_photo(
+    for key, item in dados_catalogo.items():
+        texto_botao = f"{item['preco']} {item['nome']} ({item['estoque']})"
+        callback_data = f"comprar_{key}"
+        
+        linha_atual.append(InlineKeyboardButton(texto_botao, callback_data=callback_data))
 
-                        photo=foto,
+        if len(linha_atual) == 2:
+            keyboard.append(linha_atual)
+            linha_atual = []
 
-                        caption=texto,
+    if linha_atual:
+        keyboard.append(linha_atual)
 
-                        reply_markup=reply_markup,
+    keyboard.append([InlineKeyboardButton("🔙 Voltar às Categorias", callback_data="menu_categorias")])
 
-                        parse_mode="Markdown",
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    texto = f"{titulo}\n\n{POLITICA_REEMBOLSO}"
 
-                    )
+    await query.message.edit_text(texto, reply_markup=reply_markup, parse_mode="Markdown")
 
-        else:
+# ==================== PROCESSAMENTO DE COMPRA COM VALIDAÇÃO DE SALDO ====================
+async def processar_clique_compra(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-            if update.callback_query:
+    user_id = update.effective_user.id
+    produto_key = query.data.replace("comprar_", "")
+    
+    todos_produtos = {**CATALOGO_UNITARIAS, **CATALOGO_ESIM, **CATALOGO_AUXILIAR}
+    produto = todos_produtos.get(produto_key)
 
-                await update.callback_query.message.reply_text(
+    if not produto:
+        await query.message.reply_text("Produto não disponível no momento.")
+        return
 
-                    texto, reply_markup=reply_markup, parse_mo
+    saldo_usuario = SALDOS_USUARIOS.get(user_id, 0.0)
+    preco_item = produto["preco_num"]
+
+    if saldo_usuario >= preco_item:
+        SALDOS_USUARIOS[user_id] -= preco_item
+        produto["estoque"] -= 1
+
+        texto_sucesso = (
+            f"✅ *Compra realizada com sucesso!*\n\n"
+            f"📦 *Produto:* {produto['nome']}\n"
+            f"💰 *Valor pago:* {produto['preco']}\n"
+            f"💵 *Seu Novo Saldo:* R$ {SALDOS_USUARIOS[user_id]:.2f}\n\n"
+            "📩 O material foi resgatado e processado!"
+        )
+        botoes = [[InlineKeyboardButton("🔙 Voltar ao Menu", callback_data="menu_principal")]]
+        await query.message.edit_text(texto_sucesso, reply_markup=InlineKeyboardMarkup(botoes), parse_mode="Markdown")
+
+    else:
+        texto_erro = (
+            f"❌ *Saldo Insuficiente!*\n\n"
+            f"📌 *Produto:* {produto['nome']}\n"
+            f"💰 *Preço do Produto:* {produto['preco']}\n"
+            f"💳 *Seu Saldo Atual:* R$ {saldo_usuario:.2f}\n\n"
+            "Adicione saldo à sua conta via PIX para realizar esta compra."
+        )
+
+        botoes = [
+            [InlineKeyboardButton("💳 Adicionar Saldo", callback_data="add_saldo")],
+            [InlineKeyboardButton("🔙 Voltar às Categorias", callback_data="menu_categorias")]
+        ]
+        await query.message.edit_text(texto_erro, reply_markup=InlineKeyboardMarkup(botoes), parse_mode="Markdown")
+
+# REGISTRO DE HANDLERS
+telegram_app.add_handler(CommandHandler("start", enviar_menu_principal))
+telegram_app.add_handler(CommandHandler("menu", enviar_menu_principal))
+
+telegram_app.add_handler(CallbackQueryHandler(enviar_menu_principal, pattern="^menu_principal$"))
+telegram_app.add_handler(CallbackQueryHandler(exibir_opcao_add_saldo, pattern="^add_saldo$"))
+telegram_app.add_handler(CallbackQueryHandler(exibir_menu_categorias, pattern="^menu_categorias$"))
+telegram_app.add_handler(CallbackQueryHandler(exibir_catalogo_especifico, pattern="^cat_"))
+telegram_app.add_handler(CallbackQueryHandler(processar_clique_compra, pattern="^comprar_"))
+
+# ==================== FASTAPI / RENDER ====================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await telegram_app.initialize()
+    await telegram_app.start()
+    await telegram_app.updater.start_polling()
+    logger.info("Bot rodando com sucesso no Render!")
+    yield
+    await telegram_app.updater.stop()
+    await telegram_app.stop()
+    await telegram_app.shutdown()
+
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/")
+async def health_check():
+    return {"status": "ok", "bot": "online"}
+
+@app.post("/misticpay-webhook")
+async def misticpay_webhook(request: Request):
+    data = await request.json()
+    logger.info(f"Webhook MisticPay recebido: {data}")
+    return {"status": "success"}
