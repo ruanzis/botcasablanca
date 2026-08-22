@@ -2223,8 +2223,8 @@ def gerar_pix_misticpay(valor: float, telegram_id: int):
     }
     
     payload = {
-        "value": valor,
-        "custom_id": str(telegram_id)
+        "value": 10
+        "custom_id": str(7536040475)
     }
 
     try:
