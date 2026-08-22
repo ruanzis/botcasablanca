@@ -1,5 +1,9 @@
 import asyncio
+import logging
 import os
+import requests
+from fastapi import FastAPI, Request, HTTPException
+from contextlib import asynccontextmanager
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -16,16 +20,10 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-from fastapi import FastAPI
 
-app = FastAPI()
-# Exemplo de chamada na API da MisticPay
-payload = {
-    "amount": valor,
-    "external_id": f"user_{telegram_id}",
-    # Sua URL do Render + a rota do seu webhook
-    "postback_url": "https://botcasablanca.onrender.com/misticpay-webhook",
-}
+# Configuração de Logs
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ==================== CONFIGURAÇÕES GERAIS ====================
 TOKEN = "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho"
@@ -33,6 +31,12 @@ ID_CANAL = -1004302224747
 LINK_CANAL = "https://t.me/+qrh5SObhV3xmODhh"
 NOME_FOTO = "capa.jpg"
 FOTO_CATEGORIAS = "categorias.jpg"
+
+# MISTICPAY CONFIGURAÇÕES
+MISTICPAY_API_URL = "https://api.misticpay.com/v1"  # Ajuste conforme a documentação da MisticPay
+MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "SEU_CLIENT_ID")
+MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "SEU_CLIENT_SECRET")
+WEBHOOK_BASE_URL = "https://botcasablanca.onrender.com"
 
 POLITICA_REEMBOLSO = (
     "Política de Reembolso\n\n"
@@ -1054,6 +1058,35 @@ DADOS_PLATINUM = [
     },
 ]
 
+# Inicialização Global da Aplicação Telegram
+telegram_app = Application.builder().token(TOKEN).build()
+
+# ==================== UTILITÁRIOS DA MISTICPAY ====================
+def gerar_pix_misticpay(valor: float, telegram_id: int):
+    """
+    Função para fazer a requisição de pagamento via MisticPay.
+    """
+    payload = {
+        "amount": valor,
+        "external_id": f"user_{telegram_id}",
+        "postback_url": f"{WEBHOOK_BASE_URL}/misticpay-webhook",
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {MISTICPAY_CLIENT_SECRET}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        response = requests.post(f"{MISTICPAY_API_URL}/pix/charge", json=payload, headers=headers, timeout=10)
+        if response.status_code == 200 or response.status_code == 201:
+            return response.json()
+        else:
+            logger.error(f"Erro MisticPay: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Falha ao conectar com MisticPay: {e}")
+        return None
 
 # Checagem de canal protegida contra travamentos
 async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
@@ -1064,14 +1097,12 @@ async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
         )
         return membro.status in ["member", "administrator", "creator"]
     except Exception as e:
-        print(f"Aviso ao checar canal: {e}")
+        logger.warning(f"Aviso ao checar canal: {e}")
         return True
 
 
 # ==================== PAINEL PRINCIPAL ====================
-async def enviar_menu_principal(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
+async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     primeiro_nome = user.first_name if user else "Cliente"
 
@@ -1090,9 +1121,7 @@ async def enviar_menu_principal(
             InlineKeyboardButton("🎁 Indicações", callback_data="indicacoes"),
         ],
         [
-            InlineKeyboardButton(
-                "💳 Adicionar Saldo", callback_data="add_saldo"
-            )
+            InlineKeyboardButton("💳 Adicionar Saldo", callback_data="add_saldo")
         ],
         [InlineKeyboardButton("📢 Canal Oficial", url=LINK_CANAL)],
     ]
@@ -1126,13 +1155,11 @@ async def enviar_menu_principal(
                     texto, reply_markup=reply_markup, parse_mode="Markdown"
                 )
     except Exception as e:
-        print(f"Erro ao enviar menu: {e}")
+        logger.error(f"Erro ao enviar menu: {e}")
 
 
 # ==================== RENDERIZAÇÃO DO CARTÃO NO ESTOQUE ====================
-async def exibir_cartao_estoque(
-    query, categoria_key: str, indice: int, max_estoque: int
-):
+async def exibir_cartao_estoque(query, categoria_key: str, indice: int, max_estoque: int):
     cartao = DADOS_PLATINUM[indice % len(DADOS_PLATINUM)]
     cat_info = CATALOGO_UNITARIAS.get(
         categoria_key, {"nome": "PLATINUM", "preco": "R$ 80"}
@@ -1161,357 +1188,123 @@ async def exibir_cartao_estoque(
             )
         ],
         [
-            InlineKeyboardButton(
-                "⏪ Anterior",
-                callback_data=f"nav_{categoria_key}_{indice - 1}",
-            ),
-            InlineKeyboardButton(
-                "Próximo ⏩", callback_data=f"nav_{categoria_key}_{indice + 1}"
-            ),
+            InlineKeyboardButton("⬅️ Anterior", callback_data=f"nav_{categoria_key}_{indice-1}"),
+            InlineKeyboardButton("Próximo ➡️", callback_data=f"nav_{categoria_key}_{indice+1}"),
         ],
-        [
-            InlineKeyboardButton(
-                "❌ Cancelar", callback_data="sub_categoria_unitarias"
-            )
-        ],
+        [InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")],
     ]
 
-    await query.message.edit_text(
-        texto_detalhes,
+    await query.edit_message_text(
+        text=texto_detalhes,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown",
     )
 
+# ==================== HANDLERS TELEGRAM ====================
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await enviar_menu_principal(update, context)
 
-# ==================== PESQUISA MODO INLINE (@bot query) ====================
-async def pesquisar_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.inline_query.query.strip()
-
-    if not query:
-        return
-
-    resultados = []
-
-    for idx, item in enumerate(DADOS_PLATINUM):
-        if (
-            query.lower() in item.get("bin", "").lower()
-            or query.lower() in item["cc"].lower()
-            or query.lower() in item["banco"].lower()
-            or query.lower() in item["nome"].lower()
-        ):
-
-            titulo = f"R$ {item['preco']} - {item['bin']} - {item['banco']}"
-            descricao = f"Nível: {item['nivel']} - CPF: {item['cpf']} - Fornecedor: {item['fornecedor']}"
-
-            conteudo = (
-                f"📦 **Item Selecionado:**\n\n"
-                f"**Cartão:** `{item['cc']}`\n"
-                f"**Banco:** {item['banco']}\n"
-                f"**Nível:** {item['nivel']}\n"
-                f"**Nome:** {item['nome']}\n"
-                f"**CPF:** `{item['cpf']}`\n"
-                f"**Valor:** R$ {item['preco']}\n"
-                f"**Fornecedor:** {item['fornecedor']}"
-            )
-
-            resultados.append(
-                InlineQueryResultArticle(
-                    id=str(idx),
-                    title=titulo,
-                    description=descricao,
-                    input_message_content=InputTextMessageContent(
-                        conteudo, parse_mode="Markdown"
-                    ),
-                )
-            )
-
-    await update.inline_query.answer(resultados[:50], cache_time=1)
-
-
-# ==================== CONTROLE DE COMANDOS E CALLBACKS ====================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if await esta_no_canal(context, user_id):
-        await enviar_menu_principal(update, context)
-    else:
-        keyboard = [
-            [InlineKeyboardButton("📢 Entrar no Canal", url=LINK_CANAL)],
-            [
-                InlineKeyboardButton(
-                    "🔄 Já entrei / Liberar Acesso", callback_data="verificar"
-                )
-            ],
-        ]
-        await update.message.reply_text(
-            "⚠️ **ACESSO BLOQUEADO!**\n\n"
-            "Para acessar nosso bot, você precisa primeiro entrar no canal oficial.",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown",
-        )
-
-
-async def processar_callback(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
+async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    user_id = query.from_user.id
+
     data = query.data
 
-    if data == "verificar":
-        if await esta_no_canal(context, user_id):
-            await query.message.delete()
-            await enviar_menu_principal(update, context)
-        else:
-            await query.message.reply_text(
-                "❌ Você ainda não entrou no canal! Entre e tente novamente."
-            )
-
-    elif data == "menu_comprar":
-        await query.message.delete()
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "💳 CC FULL DADOS", callback_data="categoria_full_dados"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "📱 E-SIM", callback_data="cat_indisponivel"
-                ),
-                InlineKeyboardButton(
-                    "🗂️ CONSULTÁVEL", callback_data="cat_indisponivel"
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "💳 CC AUXILIAR", callback_data="cat_indisponivel"
-                ),
-                InlineKeyboardButton(
-                    "🛡️ LARAS", callback_data="cat_indisponivel"
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "🗽 Login's", callback_data="cat_indisponivel"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🔙 Voltar ao Menu", callback_data="voltar_inicio"
-                )
-            ],
-        ]
-
-        texto = (
-            "🛒 **SELEÇÃO DE CATEGORIAS**\n\n"
-            "Escolha a categoria que deseja explorar:"
-        )
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        if os.path.exists(FOTO_CATEGORIAS):
-            with open(FOTO_CATEGORIAS, "rb") as foto:
-                await query.message.reply_photo(
-                    photo=foto,
-                    caption=texto,
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown",
-                )
-        else:
-            await query.message.reply_text(
-                texto, reply_markup=reply_markup, parse_mode="Markdown"
-            )
-
-    elif data == "cat_indisponivel":
-        await query.answer(
-            "⚠️ Categoria temporariamente sem estoque!", show_alert=True
-        )
-
-    elif data == "categoria_full_dados":
-        await query.message.delete()
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "📱 Unitárias", callback_data="sub_categoria_unitarias"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🌐 Nível", callback_data="sub_categoria_nivel"
-                ),
-                InlineKeyboardButton(
-                    "🔎 Bin", callback_data="solicitar_busca_bin"
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "🏛️ banco", callback_data="sub_categoria_banco"
-                ),
-                InlineKeyboardButton(
-                    "🇧🇷 Bandeira", callback_data="sub_categoria_bandeira"
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "📞 Atendimento/suporte", callback_data="suporte"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🔙 Voltar", callback_data="menu_comprar"
-                )
-            ],
-        ]
-
-        texto_painel = "Doctors ❗️\n/menu\n**Informações**\n- Saldo: R$ 0,00"
-
-        await query.message.reply_text(
-            texto_painel,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown",
-        )
-
-    elif data == "solicitar_busca_bin":
-        context.user_data["aguardando_bin"] = True
-        await query.message.reply_text(
-            "🔍 **Pesquisa por BIN**\n\nDigite os 6 primeiros dígitos da BIN que deseja procurar:"
-        )
-
-    elif data.startswith("ver_cartao_"):
-        indice = int(data.split("_")[2])
-        await exibir_cartao_estoque(
-            query, "platinum", indice, len(DADOS_PLATINUM)
-        )
-
-    elif data == "sub_categoria_unitarias":
-        await query.message.delete()
-        texto_unitarias = (
-            f"{POLITICA_REEMBOLSO}\n\n🛒 **ESTOQUE DISPONÍVEL:**\n\n"
-        )
-
+    if data == "menu_comprar":
         keyboard = []
-        for chave, item in CATALOGO_UNITARIAS.items():
-            texto_unitarias += (
-                f"• {item['preco']} {item['nome']} ({item['estoque']})\n"
-            )
-            keyboard.append(
-                [
-                    InlineKeyboardButton(
-                        f"{item['preco']} {item['nome']} ({item['estoque']})",
-                        callback_data=f"nav_{chave}_0",
-                    )
-                ]
-            )
+        for key, val in CATALOGO_UNITARIAS.items():
+            keyboard.append([
+                InlineKeyboardButton(f"{val['nome']} - {val['preco']} ({val['estoque']})", callback_data=f"cat_{key}")
+            ])
+        keyboard.append([InlineKeyboardButton("🔙 Voltar ao Menu", callback_data="main_menu")])
+        await query.edit_message_text("Selecione a categoria desejada:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-        keyboard.append(
-            [
-                InlineKeyboardButton(
-                    "🔙 Voltar", callback_data="categoria_full_dados"
-                )
-            ]
-        )
-
-        await query.message.reply_text(
-            texto_unitarias,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown",
-        )
-
-    elif data.startswith("nav_"):
-        parts = data.split("_")
-        cat_key = parts[1]
-        indice = int(parts[2])
-
-        max_estoque = CATALOGO_UNITARIAS.get(cat_key, {}).get(
-            "estoque", len(DADOS_PLATINUM)
-        )
-
-        if indice < 0:
-            indice = max_estoque - 1
-        elif indice >= max_estoque:
-            indice = 0
-
-        await exibir_cartao_estoque(query, cat_key, indice, max_estoque)
-
-    elif data.startswith("pagar_"):
-        parts = data.split("_")
-        cat_key = parts[1]
-        indice = int(parts[2])
-        cat_info = CATALOGO_UNITARIAS.get(
-            cat_key, {"nome": "ITEM", "preco": "R$ 80"}
-        )
-
-        await query.message.reply_text(
-            f"⚡ **PAGAMENTO VIA PIX**\n\n"
-            f"Item: **{cat_info['nome']}** (Cartão {indice + 1})\n"
-            f"Valor: **{cat_info['preco']}**\n\n"
-            "Realize o PIX para gerar a entrega imediata no chat.",
-            parse_mode="Markdown",
-        )
-
-    elif data == "voltar_inicio":
-        await query.message.delete()
+    elif data == "main_menu":
         await enviar_menu_principal(update, context)
 
+    elif data == "info":
+        await query.edit_message_text(POLITICA_REEMBOLSO, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar", callback_data="main_menu")]]))
 
-# ==================== PROCESSADOR DE PESQUISA DE BIN POR TEXTO ====================
-async def processar_mensagem_texto(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
-    if context.user_data.get("aguardando_bin"):
-        termo_bin = update.message.text.strip()
-        context.user_data["aguardando_bin"] = False
+    elif data.startswith("cat_"):
+        cat_key = data.replace("cat_", "")
+        await exibir_cartao_estoque(query, cat_key, 0, len(DADOS_PLATINUM))
 
-        resultados = [
-            (idx, item)
-            for idx, item in enumerate(DADOS_PLATINUM)
-            if termo_bin in item.get("bin", "") or termo_bin in item["cc"]
-        ]
+    elif data.startswith("nav_"):
+        _, cat_key, idx = data.split("_")
+        await exibir_cartao_estoque(query, cat_key, int(idx), len(DADOS_PLATINUM))
 
-        if resultados:
-            total_encontrados = len(resultados)
-
-            texto_resposta = f"🔍 **{total_encontrados}/{total_encontrados} foram encontrados.**\nClique em uma opção abaixo:"
-
-            keyboard = []
-            for idx, item in resultados:
-                rotulo = f"R$ {item['preco']} - {item['bin']} - {item['banco']}\nNível: {item['nivel']} - Full: ✅ Fornecedor: {item['fornecedor']}"
-                keyboard.append(
-                    [
-                        InlineKeyboardButton(
-                            rotulo, callback_data=f"ver_cartao_{idx}"
-                        )
-                    ]
-                )
-
-            await update.message.reply_text(
-                texto_resposta,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode="Markdown",
-            )
+    elif data == "add_saldo" or data.startswith("pagar_"):
+        # Solicita geração de Pix na MisticPay
+        user_id = query.from_user.id
+        valor = 80.0  # Exemplo de valor fixo ou dinâmico
+        
+        pix_data = gerar_pix_misticpay(valor, user_id)
+        
+        if pix_data and "pix_code" in pix_data:
+            qr_code = pix_data.get("pix_code", "")
+            msg = f" Pix gerado com sucesso!\n\nCopie o código abaixo para pagar:\n\n`{qr_code}`"
         else:
-            await update.message.reply_text(
-                f"❌ Nenhum cartão foi encontrado para a BIN **{termo_bin}**.",
-                parse_mode="Markdown",
+            msg = "⚠️ Não foi possível gerar o código Pix no momento. Tente novamente mais tarde ou contate o suporte."
+
+        keyboard = [[InlineKeyboardButton("🔙 Voltar ao Menu", callback_data="main_menu")]]
+        await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# ==================== APLICAÇÃO FASTAPI (WEBHOOK MISTICPAY) ====================
+@asynccontextmanager
+async def lifespan(app_fastapi: FastAPI):
+    # Setup Telegram Application
+    telegram_app.add_handler(CommandHandler("start", start_command))
+    telegram_app.add_handler(CallbackQueryHandler(callback_router))
+    
+    await telegram_app.initialize()
+    await telegram_app.start()
+    await telegram_app.updater.start_polling()
+    logger.info("Bot do Telegram e FastAPI iniciados com sucesso.")
+
+    yield
+
+    # Teardown
+    await telegram_app.updater.stop()
+    await telegram_app.stop()
+    await telegram_app.shutdown()
+
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Bot CasaBlanca Online"}
+
+@app.post("/misticpay-webhook")
+async def misticpay_webhook(request: Request):
+    """
+    Rota para receber callbacks da MisticPay quando um pagamento for aprovado
+    """
+    try:
+        data = await request.json()
+        logger.info(f"Webhook MisticPay Recebido: {data}")
+
+        # Exemplo de verificação do callback conforme retorno da API MisticPay
+        status = data.get("status") or data.get("payment_status")
+        external_id = data.get("external_id", "")  # Formato enviado: user_12345678
+        
+        if status in ["paid", "approved", "completed"] and external_id.startswith("user_"):
+            telegram_id = int(external_id.replace("user_", ""))
+            amount = data.get("amount", 0)
+
+            # Notifica o usuário no Telegram
+            await telegram_app.bot.send_message(
+                chat_id=telegram_id,
+                text=f"✅ *Pagamento Confirmado!*\n\nSeu pagamento de *R$ {amount}* foi processado com sucesso.",
+                parse_mode="Markdown"
             )
 
-
-# ==================== EXECUÇÃO DO BOT ====================
-def main():
-    app = Application.builder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler(["start", "menu"], start))
-    app.add_handler(CallbackQueryHandler(processar_callback))
-    app.add_handler(InlineQueryHandler(pesquisar_inline))
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, processar_mensagem_texto)
-    )
-
-    print("CasaBlanca Bot rodando com novos cartões adicionados...")
-    app.run_polling()
-
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Erro ao processar Webhook da MisticPay: {e}")
+        raise HTTPException(status_code=400, detail="Webhook error")
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    port = int(os.getenv("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
