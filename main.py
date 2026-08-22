@@ -19,6 +19,13 @@ from telegram.ext import (
 from fastapi import FastAPI
 
 app = FastAPI()
+# Exemplo de chamada na API da MisticPay
+payload = {
+    "amount": valor,
+    "external_id": f"user_{telegram_id}",
+    # Sua URL do Render + a rota do seu webhook
+    "postback_url": "https://botcasablanca.onrender.com/misticpay-webhook",
+}
 
 # ==================== CONFIGURAÇÕES GERAIS ====================
 TOKEN = "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho"
