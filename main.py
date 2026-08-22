@@ -4,21 +4,12 @@ import os
 import requests
 from fastapi import FastAPI, Request, HTTPException
 from contextlib import asynccontextmanager
-from telegram import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    InlineQueryResultArticle,
-    InputTextMessageContent,
-    Update,
-)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
-    InlineQueryHandler,
-    MessageHandler,
-    filters,
 )
 
 # Configuração de Logs
@@ -27,14 +18,10 @@ logger = logging.getLogger(__name__)
 
 # ==================== CONFIGURAÇÕES GERAIS ====================
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
-ID_CANAL = -1004302224747
 LINK_CANAL = "https://t.me/+qrh5SObhV3xmODhh"
-NOME_FOTO = "capa.jpg"
-FOTO_CATEGORIAS = "categorias.jpg"
 
 # CONFIGURAÇÕES MISTICPAY
 MISTICPAY_API_URL = "https://api.misticpay.com/v1"
-MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
 MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc1syoymxugk3h")
 WEBHOOK_BASE_URL = "https://botcasablanca.onrender.com"
 
@@ -62,29 +49,8 @@ CATALOGO_UNITARIAS = {
     "nubank_plat": {"nome": "NUBANK PLATINUM", "preco": "R$ 40", "estoque": 410},
 }
 
-# Inicialização Global do Telegram Bot
+# Inicialização do Bot
 telegram_app = Application.builder().token(TOKEN).build()
-
-# ==================== UTILITÁRIOS DA MISTICPAY ====================
-def gerar_pix_misticpay(valor: float, telegram_id: int):
-    payload = {
-        "amount": valor,
-        "external_id": f"user_{telegram_id}",
-        "postback_url": f"{WEBHOOK_BASE_URL}/misticpay-webhook",
-    }
-    headers = {
-        "Authorization": f"Bearer {MISTICPAY_CLIENT_SECRET}",
-        "Content-Type": "application/json"
-    }
-    try:
-        response = requests.post(f"{MISTICPAY_API_URL}/pix/charge", json=payload, headers=headers, timeout=10)
-        if response.status_code in [200, 201]:
-            return response.json()
-        logger.error(f"Erro MisticPay: {response.status_code} - {response.text}")
-        return None
-    except Exception as e:
-        logger.error(f"Falha ao conectar com MisticPay: {e}")
-        return None
 
 # ==================== PAINEL PRINCIPAL & MENUS ====================
 async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -116,7 +82,7 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await update.message.reply_text(texto, reply_markup=reply_markup, parse_mode="Markdown")
 
-# ==================== CATÁLOGO EM 2 COLUNAS (NOVO) ====================
+# ==================== CATÁLOGO EM 2 COLUNAS ====================
 async def exibir_catalogo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if query:
@@ -125,7 +91,6 @@ async def exibir_catalogo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     linha_atual = []
 
-    # Monta os botões do catálogo dinamicamente em 2 colunas
     for key, item in CATALOGO_UNITARIAS.items():
         texto_botao = f"{item['preco']} {item['nome']} ({item['estoque']})"
         callback_data = f"comprar_{key}"
@@ -139,7 +104,6 @@ async def exibir_catalogo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if linha_atual:
         keyboard.append(linha_atual)
 
-    # Botão de voltar
     keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="menu_principal")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -175,17 +139,36 @@ async def processar_clique_compra(update: Update, context: ContextTypes.DEFAULT_
 
     await query.message.reply_text(texto_confirmacao, reply_markup=InlineKeyboardMarkup(botoes), parse_mode="Markdown")
 
-# ==================== GERENCIADOR DE COMANDOS E CALLBACKS ====================
-def setup_handlers(app: Application):
-    app.add_handler(CommandHandler("start", enviar_menu_principal))
-    app.add_handler(CommandHandler("menu", enviar_menu_principal))
-    
-    # Callbacks dos menus
-    app.add_handler(CallbackQueryHandler(enviar_menu_principal, pattern="^menu_principal$"))
-    app.add_handler(CallbackQueryHandler(exibir_catalogo, pattern="^menu_comprar$"))
-    app.add_handler(CallbackQueryHandler(processar_clique_compra, pattern="^comprar_"))
+# REGISTRO DE HANDLERS
+telegram_app.add_handler(CommandHandler("start", enviar_menu_principal))
+telegram_app.add_handler(CommandHandler("menu", enviar_menu_principal))
+telegram_app.add_handler(CallbackQueryHandler(enviar_menu_principal, pattern="^menu_principal$"))
+telegram_app.add_handler(CallbackQueryHandler(exibir_catalogo, pattern="^menu_comprar$"))
+telegram_app.add_handler(CallbackQueryHandler(processar_clique_compra, pattern="^comprar_"))
 
-if __name__ == "__main__":
-    setup_handlers(telegram_app)
-    logger.info("Bot rodando com sucesso...")
-    telegram_app.run_polling()
+# ==================== INTEGRAÇÃO FASTAPI / RENDER ====================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Inicia o bot do Telegram junto com o servidor FastAPI
+    await telegram_app.initialize()
+    await telegram_app.start()
+    await telegram_app.updater.start_polling()
+    logger.info("Bot do Telegram iniciado no Render com sucesso!")
+    yield
+    # Parada graciosa ao desligar o servidor
+    await telegram_app.updater.stop()
+    await telegram_app.stop()
+    await telegram_app.shutdown()
+
+# Variável 'app' exigida pelo comando 'uvicorn main:app'
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/")
+async def health_check():
+    return {"status": "ok", "bot": "online"}
+
+@app.post("/misticpay-webhook")
+async def misticpay_webhook(request: Request):
+    data = await request.json()
+    logger.info(f"Webhook recebido: {data}")
+    return {"status": "success"}
