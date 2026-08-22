@@ -70,7 +70,7 @@ CATALOGO_UNITARIAS = {
     "infinite": {"nome": "INFINITE", "preco": "R$ 90", "estoque": 88},
 }
 
-# Base de Dados Completa com Atualização de Estoque por BIN
+# Base de Dados Completa para Navegação e Pesquisa por BIN
 DADOS_PLATINUM = [
     {
         "cc": "542819******0150",
@@ -1171,9 +1171,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "menu_comprar":
         texto = "🛍️ *Catálogo de Produtos disponíveis:*\n\nEscolha uma opção de compra:"
         keyboard = [
-            [InlineKeyboardButton("💳 GG Unitárias", callback_data="catalogo_unitarias")],
+            [InlineKeyboardButton("💳 CC FULLDADOS", callback_data="catalogo_unitarias")],
             [InlineKeyboardButton("📌 Consulta por BIN", callback_data="catalogo_bins")],
-            [InlineKeyboardButton("📜 Política de Reembolso", callback_data="politica")],
+            [InlineKeyboardButton("💳 CC AUXILIAR", callback_data="catalogo_auxiliar")],
+            [InlineKeyboardButton("📱 E-SIM", callback_data="catalogo_esim")],
             [InlineKeyboardButton("⬅️ Voltar", callback_data="menu_principal")],
         ]
         await query.message.reply_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
