@@ -34,8 +34,8 @@ FOTO_CATEGORIAS = "categorias.jpg"
 
 # MISTICPAY CONFIGURAÇÕES
 MISTICPAY_API_URL = "https://api.misticpay.com/v1"  # Ajuste conforme a documentação oficial MisticPay
-MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "SEU_CLIENT_ID")
-MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "SEU_CLIENT_SECRET")
+MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
+MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc1syoymxugk3h")
 WEBHOOK_BASE_URL = "https://botcasablanca.onrender.com"
 
 POLITICA_REEMBOLSO = (
