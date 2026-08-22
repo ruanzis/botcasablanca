@@ -16,6 +16,9 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from fastapi import FastAPI
+
+app = FastAPI()
 
 # ==================== CONFIGURAÇÕES GERAIS ====================
 TOKEN = "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho"
