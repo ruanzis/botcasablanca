@@ -1,10 +1,12 @@
 import asyncio
+import io
 import logging
 import os
 import random
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+import qrcode
 import requests
 import uvicorn
 from telegram import (
@@ -113,13 +115,15 @@ def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
     
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
+    # Validade ajustada para 30 minutos (1800 segundos)
     payload = {
         "amount": float(valor),
         "payerName": nome_usuario if nome_usuario else f"Cliente_{telegram_id}",
         "payerDocument": gerar_cpf_valido(),
         "transactionId": transaction_id,
         "description": f"Deposito Saldo Bot User {telegram_id}",
-        "projectWebhook": f"{WEBHOOK_BASE_URL.rstrip('/')}/misticpay-webhook"
+        "projectWebhook": f"{WEBHOOK_BASE_URL.rstrip('/')}/misticpay-webhook",
+        "expiresIn": 1800
     }
 
     try:
@@ -215,13 +219,26 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if dados_pix and "pix_code" in dados_pix:
         pix_code = dados_pix["pix_code"]
+        
+        # Gerando imagem QR Code em memória
+        qr_img = qrcode.make(pix_code)
+        img_buffer = io.BytesIO()
+        qr_img.save(img_buffer, format="PNG")
+        img_buffer.seek(0)
+
         msg = (
             f"💳 <b>PAGAMENTO VIA PIX GERADO</b>\n\n"
-            f"<b>Valor:</b> R$ {valor:,.2f}\n\n"
-            f"Copie o código abaixo e pague no seu app de banco:\n\n"
+            f"💰 <b>Valor:</b> R$ {valor:,.2f}\n"
+            f"⏳ <b>Validade:</b> 30 minutos\n\n"
+            f"Escaneie o QR Code acima ou copie o código abaixo:\n\n"
             f"<code>{pix_code}</code>"
         ).replace(",", "X").replace(".", ",").replace("X", ".")
-        await update.message.reply_text(msg, parse_mode="HTML")
+
+        await update.message.reply_photo(
+            photo=img_buffer,
+            caption=msg,
+            parse_mode="HTML"
+        )
     elif dados_pix and "erro" in dados_pix:
         await update.message.reply_text(f"❌ <b>Retorno MisticPay:</b>\n<code>{dados_pix['erro']}</code>", parse_mode="HTML")
     else:
@@ -404,7 +421,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await enviar_menu_principal(update, context)
 
-# Registrar Handlers no App Telegram
+# Registrar Handlers
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
 telegram_app.add_handler(InlineQueryHandler(inline_bin_search))
