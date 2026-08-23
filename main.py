@@ -5,14 +5,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 import requests
 import uvicorn
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InlineQueryResultArticle,
+    InputTextMessageContent,
+    Update,
+)
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
-    MessageHandler,
-    filters,
+    InlineQueryHandler,
 )
 
 # Configuração de Logs
@@ -23,6 +28,7 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
 ID_CANAL = os.getenv("ID_CANAL", "-1004302224747")
 LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
+LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
 
 MISTICPAY_API_URL = os.getenv("MISTICPAY_API_URL", "https://api.misticpay.com")
@@ -33,85 +39,68 @@ WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender
 POLITICA_REEMBOLSO = (
     "Política de Reembolso\n\n"
     "⚠️ Caso o saldo esteja abaixo do mínimo garantido na pré-compra, "
-    "solicite reembolso em até 20 minutos via @haridadenetwork, com vídeo mostrando cartão, valor e erro."
+    "solicite reembolso em até 20 minutos via @haridadenetwork, "
+    "com vídeo mostrando cartão, valor e erro."
 )
 
-CATALOGO_UNITARIAS = {
-    "platinum": {"nome": "PLATINUM", "preco": 80, "estoque": 521},
-    "gold": {"nome": "GOLD", "preco": 50, "estoque": 176},
-    "personal": {"nome": "PERSONAL", "preco": 50, "estoque": 55},
-    "business": {"nome": "BUSINESS", "preco": 80, "estoque": 162},
-    "elo": {"nome": "ELO", "preco": 50, "estoque": 24},
-    "black": {"nome": "BLACK", "preco": 120, "estoque": 118},
-    "personal_plat_charge": {"nome": "PERSONAL PLATINUM CHARGE", "preco": 120, "estoque": 34},
-    "personal_gold_charge": {"nome": "PERSONAL GOLD CHARGE", "preco": 120, "estoque": 14},
-    "signature": {"nome": "SIGNATURE", "preco": 80, "estoque": 6},
-    "nubank_gold": {"nome": "NUBANK GOLD", "preco": 35, "estoque": 501},
-    "nubank_plat": {"nome": "NUBANK PLATINUM", "preco": 40, "estoque": 430},
-    "classic": {"nome": "CLASSIC", "preco": 30, "estoque": 201},
-    "standard": {"nome": "STANDARD", "preco": 20, "estoque": 104},
-    "infinite": {"nome": "INFINITE", "preco": 90, "estoque": 88},
-}
+CATALOGO_UNITARIAS = [
+    {"nome": "PLATINUM", "preco": 80, "qtd": 525},
+    {"nome": "PERSONAL", "preco": 50, "qtd": 55},
+    {"nome": "GOLD", "preco": 50, "qtd": 174},
+    {"nome": "ELO", "preco": 50, "qtd": 1},
+    {"nome": "BUSINESS", "preco": 80, "qtd": 16},
+    {"nome": "INFINITE", "preco": 120, "qtd": 413},
+    {"nome": "BLACK", "preco": 120, "qtd": 114},
+    {"nome": "SIGNATURE", "preco": 80, "qtd": 3},
+    {"nome": "NUBANK GOLD", "preco": 35, "qtd": 501},
+    {"nome": "NUBANK PLATINUM", "preco": 40, "qtd": 430},
+]
 
-DADOS_PLATINUM = [
+DADOS_CARTOES = [
     {
-        "cc": "435086******3663",
-        "banco": "ITAU UNIBANCO HOLDING, S.A.",
-        "nome": "CELSO MARCELO RAMOS MARTINS",
-        "cpf": "01490398759",
-        "serasa": "461",
-        "bc": "647",
-        "bin": "435086",
-        "nivel": "PLATINUM",
-        "fornecedor": "Anon",
-        "preco": 80,
-    },
-    {
+        "id": "1",
         "cc": "542819******0150",
         "banco": "BANCO GENIAL SA",
+        "categoria": "FULL PLATINUM",
+        "tipo": "CREDIT",
         "nome": "CRISTIANO CACHEIRO MAHIA",
         "cpf": "03250698679",
-        "serasa": "306",
-        "bc": "93",
         "bin": "542819",
-        "nivel": "FULL PLATINUM",
         "fornecedor": "Anon",
-        "preco": 80,
+        "preco": 80.00,
+        "saldo_minimo": 1200.00,
+    },
+    {
+        "id": "2",
+        "cc": "544169******0487",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "CREDIT",
+        "nome": "ALEXANDRE CARVALHO CHANAN",
+        "cpf": "18319050006",
+        "bin": "544169",
+        "fornecedor": "Anon",
+        "preco": 80.00,
+        "saldo_minimo": 1200.00,
+    },
+    {
+        "id": "3",
+        "cc": "543960******8821",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "FULL PLATINUM",
+        "tipo": "CREDIT",
+        "nome": "MARCOS SILVA OLIVEIRA",
+        "cpf": "04421098712",
+        "bin": "543960",
+        "fornecedor": "Anon",
+        "preco": 80.00,
+        "saldo_minimo": 1200.00,
     },
 ]
 
 telegram_app = Application.builder().token(TOKEN).build()
 
-# ==================== FUNÇÃO PIX COM HEADERS MISTICPAY ====================
-def gerar_pix_misticpay(valor: float, telegram_id: int):
-    if not MISTICPAY_CLIENT_SECRET or not MISTICPAY_CLIENT_ID:
-        logger.error("Credenciais MisticPay ausentes no ambiente.")
-        return None
-
-    payload = {
-        "amount": valor,
-        "external_id": f"user_{telegram_id}",
-        "postback_url": f"{WEBHOOK_BASE_URL}/misticpay-webhook",
-    }
-
-    # HEADERS EXATOS SOLICITADOS PELA MISTICPAY
-    headers = {
-        "ci": MISTICPAY_CLIENT_ID,
-        "cs": MISTICPAY_CLIENT_SECRET,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-
-    try:
-        response = requests.post(f"{MISTICPAY_API_URL}/api/transactions/withdraw/internal", json=payload, headers=headers, timeout=12)
-        if response.status_code in [200, 201]:
-            return response.json()
-        logger.error(f"Erro MisticPay status {response.status_code}: {response.text}")
-        return None
-    except Exception as e:
-        logger.error(f"Erro de conexão com MisticPay: {e}")
-        return None
-
+# ==================== UTILITÁRIOS & CANAL ====================
 async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     try:
         membro = await context.bot.get_chat_member(chat_id=ID_CANAL, user_id=user_id)
@@ -125,7 +114,7 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
     primeiro_nome = user.first_name if user else "Cliente"
 
     texto = (
-        f"Olá <b>{primeiro_nome}</b>, seja bem-vindo ao <b>CasaBlanca Bot</b>! 🏛️✨\n\n"
+        f"Olá <b>{primeiro_nome}</b> ! , seja bem-vindo ao <b>CasaBlanca Bot!</b> 🏛️✨\n\n"
         "Selecione uma opção abaixo para navegar pelo nosso catálogo:"
     )
 
@@ -135,7 +124,7 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
             InlineKeyboardButton("ℹ️ Informações", callback_data="info"),
         ],
         [
-            InlineKeyboardButton("🛠️ Ferramentas", callback_data="ferramentas"),
+            InlineKeyboardButton("🔧 Ferramentas", callback_data="ferramentas"),
             InlineKeyboardButton("🎁 Indicações", callback_data="indicacoes"),
         ],
         [InlineKeyboardButton("💳 Adicionar Saldo", callback_data="add_saldo")],
@@ -150,11 +139,11 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
                 await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=texto, reply_markup=reply_markup, parse_mode="HTML")
                 return
         except Exception as e:
-            logger.error(f"Erro capa: {e}")
+            logger.error(f"Erro ao enviar capa: {e}")
 
     await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=reply_markup, parse_mode="HTML")
 
-# ==================== HANDLERS TELEGRAM ====================
+# ==================== HANDLERS PRINCIPAIS ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if await esta_no_canal(context, user_id):
@@ -170,14 +159,56 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
 
+# ==================== INLINE QUERY (PESQUISA POR BIN) ====================
+async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.inline_query.query.strip().lower()
+    results = []
+
+    cartoes_filtrados = [c for c in DADOS_CARTOES if query in c["bin"].lower()] if query else DADOS_CARTOES
+
+    for item in cartoes_filtrados:
+        texto_resposta = (
+            f"Número do Cartão: {item['cc']}\n"
+            f"Banco: {item['banco']}\n"
+            f"Categoria: {item['categoria']}\n"
+            f"Tipo: {item['tipo']}\n"
+            f"NOME: {item['nome']}\n"
+            f"CPF: {item['cpf']}\n\n"
+            f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:,.2f}</b>\n"
+            f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a <b>Política de Reembolso</b>.\n\n"
+            f"Valor da Compra: R$ {item['preco']:,.2f}\n\n"
+            f"Fornecedor: <i>{item['fornecedor']}</i>"
+        ).replace(",", "X").replace(".", ",").replace("X", ".")
+
+        keyboard = [
+            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{item['id']}")],
+            [
+                InlineKeyboardButton("⬅️ Anterior", callback_data=f"nav_card_prev_{item['id']}"),
+                InlineKeyboardButton("Próximo ➡️", callback_data=f"nav_card_next_{item['id']}"),
+            ],
+            [InlineKeyboardButton("❌ Cancelar", callback_data="voltar_cc_full")],
+        ]
+
+        results.append(
+            InlineQueryResultArticle(
+                id=item["id"],
+                title=f"R$ {item['preco']:.2f} - {item['bin']} - {item['banco']}",
+                description=f"Nível: {item['categoria']} - Full: ✅\nFornecedor: {item['fornecedor']}",
+                input_message_content=InputTextMessageContent(texto_resposta, parse_mode="HTML"),
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+        )
+
+    await update.inline_query.answer(results, cache_time=1)
+
+# ==================== CALLBACK QUERY HANDLER ====================
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    user_id = query.from_user.id
     data = query.data
 
     if data == "verificar":
-        if await esta_no_canal(context, user_id):
+        if await esta_no_canal(context, query.from_user.id):
             await query.message.delete()
             await enviar_menu_principal(update, context)
         else:
@@ -185,26 +216,53 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "menu_comprar":
         keyboard = [
-            [InlineKeyboardButton("📱 CC Unitárias", callback_data="sub_categoria_unitarias")],
-            [InlineKeyboardButton("📁 ESTOQUE CC FULL DADOS", callback_data="categoria_full_dados")],
+            [InlineKeyboardButton("💳 CC FULL DADOS", callback_data="voltar_cc_full")],
+            [InlineKeyboardButton("📱 E-SIM", callback_data="esim"), InlineKeyboardButton("📁 CONSULTÁVEL", callback_data="consultavel")],
+            [InlineKeyboardButton("💳 CC AUXILIAR", callback_data="cc_auxiliar"), InlineKeyboardButton("🛡️ LARAS", callback_data="laras")],
+            [InlineKeyboardButton("🗽 Login's", callback_data="logins")],
             [InlineKeyboardButton("🔙 Voltar ao Menu", callback_data="voltar_inicio")],
         ]
-        await query.message.edit_text("🛒 <b>SELEÇÃO DE CATEGORIAS DE COMPRA</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        await query.message.edit_text(
+            "🛒 <b>SELEÇÃO DE CATEGORIAS</b>\n\nEscolha a categoria que deseja explorar:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
 
-    elif data == "sub_categoria_unitarias":
-        texto = "🛒 <b>ESTOQUE DE CCs UNITÁRIAS:</b>\n\n"
+    elif data == "voltar_cc_full":
+        keyboard = [
+            [InlineKeyboardButton("🔢 Unitárias", callback_data="ver_unitarias")],
+            [
+                InlineKeyboardButton("📊 Nível", callback_data="nivel"),
+                InlineKeyboardButton("🔍 Bin", switch_inline_query_current_chat=""),
+            ],
+            [
+                InlineKeyboardButton("🏦 banco", callback_data="banco"),
+                InlineKeyboardButton("🇧🇷 Bandeira", callback_data="bandeira"),
+            ],
+            [InlineKeyboardButton("💬 Atendimento/suporte", url=LINK_SUPORTE)],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")],
+        ]
+        texto = "Informações\n- Saldo: R$ 0,00"
+        if query.message.photo:
+            await query.message.delete()
+            await context.bot.send_message(chat_id=query.message.chat_id, text=texto, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data == "ver_unitarias":
         keyboard = []
-        for chave, item in CATALOGO_UNITARIAS.items():
-            texto += f"• {item['nome']} - R$ {item['preco']} (Estoque: {item['estoque']})\n"
-            keyboard.append([InlineKeyboardButton(f"{item['nome']} - R$ {item['preco']}", callback_data=f"nav_{chave}_0")])
+        for i in range(0, len(CATALOGO_UNITARIAS), 2):
+            row = []
+            item1 = CATALOGO_UNITARIAS[i]
+            row.append(InlineKeyboardButton(f"R$ {item1['preco']} {item1['nome']} ({item1['qtd']})", callback_data=f"buy_unit_{i}"))
+            if i + 1 < len(CATALOGO_UNITARIAS):
+                item2 = CATALOGO_UNITARIAS[i+1]
+                row.append(InlineKeyboardButton(f"R$ {item2['preco']} {item2['nome']} ({item2['qtd']})", callback_data=f"buy_unit_{i+1}"))
+            keyboard.append(row)
 
-        keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")])
-        await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="voltar_cc_full")])
+        await query.message.edit_text(POLITICA_REEMBOLSO, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-    elif data == "info":
-        await query.message.reply_text(POLITICA_REEMBOLSO)
-    elif data == "add_saldo":
-        await query.message.reply_text("💳 Use o comando <code>/pix 50</code> para gerar um PIX no valor desejado.", parse_mode="HTML")
     elif data == "voltar_inicio":
         try:
             await query.message.delete()
@@ -214,9 +272,10 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Registra os Handlers
 telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(InlineQueryHandler(inline_bin_search))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
 
-# ==================== FASTAPI APP ====================
+# ==================== FASTAPI APP & RENDER WEBHOOK ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await telegram_app.initialize()
