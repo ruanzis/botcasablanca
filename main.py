@@ -31,6 +31,11 @@ LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
 
+# Credenciais MisticPay
+MISTICPAY_API_URL = "https://api.misticpay.com/api"
+MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
+MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc1syoymxugk3h")
+
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
 POLITICA_REEMBOLSO = (
@@ -40,23 +45,26 @@ POLITICA_REEMBOLSO = (
     "com vídeo mostrando cartão, valor e erro."
 )
 
+# Banco de Dados de Saldo em Memória {telegram_id: float}
+SALDO_USUARIOS = {}
+
 CATALOGO_UNITARIAS = [
-    {"nome": "PLATINUM", "preco": 80, "qtd": 525},
-    {"nome": "PERSONAL", "preco": 50, "qtd": 55},
-    {"nome": "GOLD", "preco": 50, "qtd": 174},
-    {"nome": "ELO", "preco": 50, "qtd": 1},
-    {"nome": "BUSINESS", "preco": 80, "qtd": 16},
-    {"nome": "INFINITE", "preco": 120, "qtd": 413},
-    {"nome": "BLACK", "preco": 120, "qtd": 114},
-    {"nome": "SIGNATURE", "preco": 80, "qtd": 3},
-    {"nome": "NUBANK GOLD", "preco": 35, "qtd": 501},
-    {"nome": "NUBANK PLATINUM", "preco": 40, "qtd": 430},
+    {"id": "unit_0", "nome": "PLATINUM", "preco": 80.0, "qtd": 525},
+    {"id": "unit_1", "nome": "PERSONAL", "preco": 50.0, "qtd": 55},
+    {"id": "unit_2", "nome": "GOLD", "preco": 50.0, "qtd": 174},
+    {"id": "unit_3", "nome": "ELO", "preco": 50.0, "qtd": 1},
+    {"id": "unit_4", "nome": "BUSINESS", "preco": 80.0, "qtd": 16},
+    {"id": "unit_5", "nome": "INFINITE", "preco": 120.0, "qtd": 413},
+    {"id": "unit_6", "nome": "BLACK", "preco": 120.0, "qtd": 114},
+    {"id": "unit_7", "nome": "SIGNATURE", "preco": 80.0, "qtd": 3},
+    {"id": "unit_8", "nome": "NUBANK GOLD", "preco": 35.0, "qtd": 501},
+    {"id": "unit_9", "nome": "NUBANK PLATINUM", "preco": 40.0, "qtd": 430},
 ]
 
 DADOS_CARTOES = [
     {
-        "id": "1",
-        "cc": "542819******0150",
+        "id": "card_1",
+        "cc": "542819******0150|08|2028|306",
         "banco": "BANCO GENIAL SA",
         "categoria": "FULL PLATINUM",
         "tipo": "CREDIT",
@@ -66,10 +74,11 @@ DADOS_CARTOES = [
         "fornecedor": "Anon",
         "preco": 80.00,
         "saldo_minimo": 1200.00,
+        "vendido": False,
     },
     {
-        "id": "2",
-        "cc": "544169******0487",
+        "id": "card_2",
+        "cc": "544169******0487|05|2029|931",
         "banco": "ITAU UNIBANCO, S.A.",
         "categoria": "PLATINUM",
         "tipo": "CREDIT",
@@ -79,17 +88,45 @@ DADOS_CARTOES = [
         "fornecedor": "Anon",
         "preco": 80.00,
         "saldo_minimo": 1200.00,
+        "vendido": False,
     },
 ]
 
 telegram_app = Application.builder().token(TOKEN).build()
 
+# ==================== MISTICPAY API INTEGRACAO ====================
+def gerar_pix_misticpay(valor: float, telegram_id: int):
+    url = f"{MISTICPAY_API_URL}/transactions/create"
+    headers = {
+        "ci": MISTICPAY_CLIENT_ID,
+        "cs": MISTICPAY_CLIENT_SECRET,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "value": valor,
+        "external_id": f"user_{telegram_id}",
+        "projectWebhook": f"{WEBHOOK_BASE_URL}/misticpay-webhook",
+    }
+
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=12)
+        if response.status_code in [200, 201]:
+            res = response.json()
+            qr_code = res.get("qrCode") or res.get("pixCopiaECola") or res.get("copyPaste")
+            return {"pix_code": qr_code}
+        logger.error(f"Erro MisticPay [{response.status_code}]: {response.text}")
+        return None
+    except Exception as e:
+        logger.error(f"Erro conexão MisticPay: {e}")
+        return None
+
+# ==================== CONTROLE CANAL & MENUS ====================
 async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     try:
         membro = await context.bot.get_chat_member(chat_id=ID_CANAL, user_id=user_id)
         return membro.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.warning(f"Erro ao validar canal: {e}")
+        logger.warning(f"Erro validação canal: {e}")
         return True
 
 async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -122,10 +159,11 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
                 await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=texto, reply_markup=reply_markup, parse_mode="HTML")
                 return
         except Exception as e:
-            logger.error(f"Erro ao enviar capa: {e}")
+            logger.error(f"Erro capa: {e}")
 
     await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=reply_markup, parse_mode="HTML")
 
+# ==================== COMANDOS ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if await esta_no_canal(context, user_id):
@@ -138,32 +176,56 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "⚠️ <b>ACESSO BLOQUEADO!</b>\n\nPara acessar nosso bot, entre no canal oficial.",
             reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
+
+async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    try:
+        valor = float(context.args[0])
+        if valor < 1.0:
+            await update.message.reply_text("⚠️ O valor mínimo para depósito por PIX é R$ 1,00.")
+            return
+    except (IndexError, ValueError):
+        await update.message.reply_text("⚠️ Uso correto: <code>/pix 20</code>", parse_mode="HTML")
+        return
+
+    dados_pix = gerar_pix_misticpay(valor, user_id)
+    if dados_pix and dados_pix.get("pix_code"):
+        pix_code = dados_pix["pix_code"]
+        msg = (
+            f"💳 <b>PAGAMENTO VIA PIX GENERADO</b>\n\n"
+            f"<b>Valor:</b> R$ {valor:,.2f}\n\n"
+            f"Copie o código abaixo e pague no seu app de banco:\n\n"
+            f"<code>{pix_code}</code>"
+        ).replace(",", "X").replace(".", ",").replace("X", ".")
+        await update.message.reply_text(msg, parse_mode="HTML")
+    else:
+        await update.message.reply_text("❌ Falha ao gerar PIX MisticPay. Verifique a API ou tente novamente.")
 
 # ==================== PESQUISA POR BIN (INLINE) ====================
 async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query.strip().lower()
     results = []
 
-    cartoes_filtrados = [c for c in DADOS_CARTOES if query in c["bin"].lower()] if query else DADOS_CARTOES
+    cartoes_filtrados = [c for c in DADOS_CARTOES if not c["vendido"] and query in c["bin"].lower()] if query else [c for c in DADOS_CARTOES if not c["vendido"]]
 
     for item in cartoes_filtrados:
         texto_resposta = (
-            f"Número do Cartão: {item['cc']}\n"
+            f"Número do Cartão: {item['cc'][:12]}****\n"
             f"Banco: {item['banco']}\n"
             f"Categoria: {item['categoria']}\n"
             f"Tipo: {item['tipo']}\n"
             f"NOME: {item['nome']}\n"
             f"CPF: {item['cpf']}\n\n"
             f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:,.2f}</b>\n"
-            f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a <b>Política de Reembolso</b>.\n\n"
+            f"Se o saldo for menor, solicite reembolso conforme a <b>Política de Reembolso</b>.\n\n"
             f"Valor da Compra: R$ {item['preco']:,.2f}\n\n"
             f"Fornecedor: <i>{item['fornecedor']}</i>"
         ).replace(",", "X").replace(".", ",").replace("X", ".")
 
         keyboard = [
-            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_{item['id']}")],
+            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{item['id']}")],
             [
                 InlineKeyboardButton("⬅️ Anterior", callback_data="nav_prev"),
                 InlineKeyboardButton("Próximo ➡️", callback_data="nav_next"),
@@ -183,24 +245,29 @@ async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.inline_query.answer(results, cache_time=1)
 
-# ==================== TRATAMENTO DE BOTOES ====================
+# ==================== CALLBACKS E COMPRAS ====================
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    # RESPOSTA IMEDIATA AO TELEGRAM PARA EVITAR O TRAVAMENTO DO BOTÃO
     try:
         await query.answer()
     except Exception:
         pass
 
+    user_id = query.from_user.id
     data = query.data
     chat_id = query.message.chat_id
 
+    saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
+
     if data == "verificar":
-        if await esta_no_canal(context, query.from_user.id):
+        if await esta_no_canal(context, user_id):
             await query.message.delete()
             await enviar_menu_principal(update, context)
         else:
             await query.message.reply_text("❌ Você ainda não entrou no canal!")
+
+    elif data == "add_saldo":
+        await query.message.reply_text("💳 Digite no chat o valor para depósito:\n\nExemplo: <code>/pix 20</code>", parse_mode="HTML")
 
     elif data == "menu_comprar":
         keyboard = [
@@ -211,13 +278,11 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Voltar ao Menu", callback_data="voltar_inicio")],
         ]
         markup = InlineKeyboardMarkup(keyboard)
-        
-        # Trata mensagens com ou sem imagem sem quebrar a execução
         if query.message.photo:
             await query.message.delete()
-            await context.bot.send_message(chat_id=chat_id, text="🛒 <b>SELEÇÃO DE CATEGORIAS</b>\n\nEscolha a categoria que deseja explorar:", reply_markup=markup, parse_mode="HTML")
+            await context.bot.send_message(chat_id=chat_id, text="🛒 <b>SELEÇÃO DE CATEGORIAS</b>\n\nEscolha a categoria:", reply_markup=markup, parse_mode="HTML")
         else:
-            await query.message.edit_text("🛒 <b>SELEÇÃO DE CATEGORIAS</b>\n\nEscolha a categoria que deseja explorar:", reply_markup=markup, parse_mode="HTML")
+            await query.message.edit_text("🛒 <b>SELEÇÃO DE CATEGORIAS</b>\n\nEscolha a categoria:", reply_markup=markup, parse_mode="HTML")
 
     elif data == "voltar_cc_full":
         keyboard = [
@@ -233,7 +298,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("💬 Atendimento/suporte", url=LINK_SUPORTE)],
             [InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")],
         ]
-        texto = "Informações\n- Saldo: R$ 0,00"
+        texto = f"Informações\n- Saldo: R$ {saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         markup = InlineKeyboardMarkup(keyboard)
 
         if query.message.photo:
@@ -244,17 +309,63 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "ver_unitarias":
         keyboard = []
-        for i in range(0, len(CATALOGO_UNITARIAS), 2):
-            row = []
-            item1 = CATALOGO_UNITARIAS[i]
-            row.append(InlineKeyboardButton(f"R$ {item1['preco']} {item1['nome']} ({item1['qtd']})", callback_data=f"buy_u_{i}"))
-            if i + 1 < len(CATALOGO_UNITARIAS):
-                item2 = CATALOGO_UNITARIAS[i+1]
-                row.append(InlineKeyboardButton(f"R$ {item2['preco']} {item2['nome']} ({item2['qtd']})", callback_data=f"buy_u_{i+1}"))
-            keyboard.append(row)
+        for item in CATALOGO_UNITARIAS:
+            keyboard.append([InlineKeyboardButton(f"R$ {item['preco']:.0f} {item['nome']} ({item['qtd']})", callback_data=f"buy_u_{item['id']}")])
 
         keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="voltar_cc_full")])
         await query.message.edit_text(POLITICA_REEMBOLSO, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("buy_u_"):
+        unit_id = data.replace("buy_u_", "")
+        item = next((x for x in CATALOGO_UNITARIAS if x["id"] == unit_id), None)
+        if item:
+            if saldo_atual < item["preco"]:
+                await query.message.reply_text(
+                    f"❌ <b>SALDO INSUFICIENTE!</b>\n\n"
+                    f"Preço: R$ {item['preco']:,.2f}\n"
+                    f"Seu Saldo: R$ {saldo_atual:,.2f}\n\n"
+                    f"Adicione saldo digitando: <code>/pix {int(item['preco'])}</code>",
+                    parse_mode="HTML",
+                )
+            elif item["qtd"] <= 0:
+                await query.message.reply_text("❌ Estoque esgotado para este produto!")
+            else:
+                SALDO_USUARIOS[user_id] -= item["preco"]
+                item["qtd"] -= 1
+                await query.message.reply_text(
+                    f"✅ <b>COMPRA REALIZADA COM SUCESSO!</b>\n\n"
+                    f"Item: {item['nome']}\n"
+                    f"Valor: R$ {item['preco']:,.2f}\n"
+                    f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
+                    parse_mode="HTML",
+                )
+
+    elif data.startswith("buy_card_"):
+        card_id = data.replace("buy_card_", "")
+        card = next((c for c in DADOS_CARTOES if c["id"] == card_id), None)
+        if card:
+            if card["vendido"]:
+                await query.message.reply_text("❌ Este cartão já foi vendido!")
+            elif saldo_atual < card["preco"]:
+                await query.message.reply_text(
+                    f"❌ <b>SALDO INSUFICIENTE!</b>\n\n"
+                    f"Preço do cartão: R$ {card['preco']:,.2f}\n"
+                    f"Seu Saldo: R$ {saldo_atual:,.2f}\n\n"
+                    f"Adicione saldo digitando: <code>/pix {int(card['preco'])}</code>",
+                    parse_mode="HTML",
+                )
+            else:
+                SALDO_USUARIOS[user_id] -= card["preco"]
+                card["vendido"] = True
+                await query.message.reply_text(
+                    f"🎉 <b>COMPRA CONCLUÍDA!</b>\n\n"
+                    f"<b>Dados do Cartão:</b>\n<code>{card['cc']}</code>\n"
+                    f"<b>Nome:</b> {card['nome']}\n"
+                    f"<b>CPF:</b> {card['cpf']}\n"
+                    f"<b>Banco:</b> {card['banco']}\n\n"
+                    f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
+                    parse_mode="HTML",
+                )
 
     elif data == "voltar_inicio":
         try:
@@ -263,12 +374,13 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await enviar_menu_principal(update, context)
 
-# Registra os Handlers
+# Registra Handlers
 telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("pix", comando_pix))
 telegram_app.add_handler(InlineQueryHandler(inline_bin_search))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
 
-# ==================== FASTAPI APP & RENDER WEBHOOK ====================
+# ==================== FASTAPI APP & WEBHOOKS ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await telegram_app.initialize()
@@ -287,6 +399,32 @@ async def telegram_webhook(request: Request):
     update = Update.de_json(data, telegram_app.bot)
     await telegram_app.process_update(update)
     return {"status": "ok"}
+
+@app.post("/misticpay-webhook")
+async def misticpay_webhook(request: Request):
+    try:
+        payload = await request.json()
+        logger.info(f"Webhook MisticPay: {payload}")
+
+        status = payload.get("status")
+        value = float(payload.get("value", 0))
+        external_id = payload.get("external_id") or payload.get("custom_id") or ""
+
+        if status == "COMPLETO" and "user_" in external_id:
+            user_id = int(external_id.replace("user_", ""))
+            SALDO_USUARIOS[user_id] = SALDO_USUARIOS.get(user_id, 0.0) + value
+
+            texto_sucesso = (
+                f"✅ <b>PAGAMENTO CONFIRMADO!</b>\n\n"
+                f"Foi creditado <b>R$ {value:,.2f}</b> na sua conta."
+            ).replace(",", "X").replace(".", ",").replace("X", ".")
+
+            await telegram_app.bot.send_message(chat_id=user_id, text=texto_sucesso, parse_mode="HTML")
+
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Erro webhook MisticPay: {e}")
+        return {"status": "error", "message": str(e)}
 
 @app.get("/")
 async def root():
