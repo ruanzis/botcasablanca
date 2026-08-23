@@ -31,13 +31,10 @@ LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
 
-MISTICPAY_API_URL = os.getenv("MISTICPAY_API_URL", "https://api.misticpay.com")
-MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "")
-MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
 POLITICA_REEMBOLSO = (
-    "Política de Reembolso\n\n"
+    "<b>Política de Reembolso</b>\n\n"
     "⚠️ Caso o saldo esteja abaixo do mínimo garantido na pré-compra, "
     "solicite reembolso em até 20 minutos via @haridadenetwork, "
     "com vídeo mostrando cartão, valor e erro."
@@ -83,24 +80,10 @@ DADOS_CARTOES = [
         "preco": 80.00,
         "saldo_minimo": 1200.00,
     },
-    {
-        "id": "3",
-        "cc": "543960******8821",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "FULL PLATINUM",
-        "tipo": "CREDIT",
-        "nome": "MARCOS SILVA OLIVEIRA",
-        "cpf": "04421098712",
-        "bin": "543960",
-        "fornecedor": "Anon",
-        "preco": 80.00,
-        "saldo_minimo": 1200.00,
-    },
 ]
 
 telegram_app = Application.builder().token(TOKEN).build()
 
-# ==================== UTILITÁRIOS & CANAL ====================
 async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     try:
         membro = await context.bot.get_chat_member(chat_id=ID_CANAL, user_id=user_id)
@@ -143,7 +126,6 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
 
     await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=reply_markup, parse_mode="HTML")
 
-# ==================== HANDLERS PRINCIPAIS ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if await esta_no_canal(context, user_id):
@@ -159,7 +141,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
 
-# ==================== INLINE QUERY (PESQUISA POR BIN) ====================
+# ==================== PESQUISA POR BIN (INLINE) ====================
 async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query.strip().lower()
     results = []
@@ -181,10 +163,10 @@ async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ).replace(",", "X").replace(".", ",").replace("X", ".")
 
         keyboard = [
-            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{item['id']}")],
+            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_{item['id']}")],
             [
-                InlineKeyboardButton("⬅️ Anterior", callback_data=f"nav_card_prev_{item['id']}"),
-                InlineKeyboardButton("Próximo ➡️", callback_data=f"nav_card_next_{item['id']}"),
+                InlineKeyboardButton("⬅️ Anterior", callback_data="nav_prev"),
+                InlineKeyboardButton("Próximo ➡️", callback_data="nav_next"),
             ],
             [InlineKeyboardButton("❌ Cancelar", callback_data="voltar_cc_full")],
         ]
@@ -201,11 +183,17 @@ async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.inline_query.answer(results, cache_time=1)
 
-# ==================== CALLBACK QUERY HANDLER ====================
+# ==================== TRATAMENTO DE BOTOES ====================
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    # RESPOSTA IMEDIATA AO TELEGRAM PARA EVITAR O TRAVAMENTO DO BOTÃO
+    try:
+        await query.answer()
+    except Exception:
+        pass
+
     data = query.data
+    chat_id = query.message.chat_id
 
     if data == "verificar":
         if await esta_no_canal(context, query.from_user.id):
@@ -222,11 +210,14 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🗽 Login's", callback_data="logins")],
             [InlineKeyboardButton("🔙 Voltar ao Menu", callback_data="voltar_inicio")],
         ]
-        await query.message.edit_text(
-            "🛒 <b>SELEÇÃO DE CATEGORIAS</b>\n\nEscolha a categoria que deseja explorar:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="HTML"
-        )
+        markup = InlineKeyboardMarkup(keyboard)
+        
+        # Trata mensagens com ou sem imagem sem quebrar a execução
+        if query.message.photo:
+            await query.message.delete()
+            await context.bot.send_message(chat_id=chat_id, text="🛒 <b>SELEÇÃO DE CATEGORIAS</b>\n\nEscolha a categoria que deseja explorar:", reply_markup=markup, parse_mode="HTML")
+        else:
+            await query.message.edit_text("🛒 <b>SELEÇÃO DE CATEGORIAS</b>\n\nEscolha a categoria que deseja explorar:", reply_markup=markup, parse_mode="HTML")
 
     elif data == "voltar_cc_full":
         keyboard = [
@@ -243,21 +234,23 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")],
         ]
         texto = "Informações\n- Saldo: R$ 0,00"
+        markup = InlineKeyboardMarkup(keyboard)
+
         if query.message.photo:
             await query.message.delete()
-            await context.bot.send_message(chat_id=query.message.chat_id, text=texto, reply_markup=InlineKeyboardMarkup(keyboard))
+            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=markup)
         else:
-            await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard))
+            await query.message.edit_text(texto, reply_markup=markup)
 
     elif data == "ver_unitarias":
         keyboard = []
         for i in range(0, len(CATALOGO_UNITARIAS), 2):
             row = []
             item1 = CATALOGO_UNITARIAS[i]
-            row.append(InlineKeyboardButton(f"R$ {item1['preco']} {item1['nome']} ({item1['qtd']})", callback_data=f"buy_unit_{i}"))
+            row.append(InlineKeyboardButton(f"R$ {item1['preco']} {item1['nome']} ({item1['qtd']})", callback_data=f"buy_u_{i}"))
             if i + 1 < len(CATALOGO_UNITARIAS):
                 item2 = CATALOGO_UNITARIAS[i+1]
-                row.append(InlineKeyboardButton(f"R$ {item2['preco']} {item2['nome']} ({item2['qtd']})", callback_data=f"buy_unit_{i+1}"))
+                row.append(InlineKeyboardButton(f"R$ {item2['preco']} {item2['nome']} ({item2['qtd']})", callback_data=f"buy_u_{i+1}"))
             keyboard.append(row)
 
         keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="voltar_cc_full")])
