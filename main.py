@@ -103,31 +103,37 @@ def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
     
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
-    # Body exato conforme documentacao MisticPay
+    # Payload exato exigido pela MisticPay
     payload = {
         "amount": valor,
         "payerName": nome_usuario if nome_usuario else f"Cliente_{telegram_id}",
-        "payerDocument": "12345678909",  # CPF generico obrigatorio conforme doc
+        "payerDocument": "12345678909",  # CPF fictício sem formatação
         "transactionId": transaction_id,
-        "description": f"Deposito Saldo Bot User {telegram_id}",
+        "description": f"Deposito Saldo User {telegram_id}",
         "projectWebhook": f"{WEBHOOK_BASE_URL}/misticpay-webhook"
     }
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=12)
-        logger.info(f"MisticPay Response Status: {response.status_code}")
-        logger.info(f"MisticPay Response Body: {response.text}")
+        logger.info(f"MisticPay Response [{response.status_code}]: {response.text}")
 
         if response.status_code in [200, 201]:
             res = response.json()
+            # MisticPay retorna 'copyPaste' para o Pix Copia e Cola
             data_obj = res.get("data", {})
-            pix_code = data_obj.get("copyPaste") or data_obj.get("qrCodeBase64")
+            pix_code = data_obj.get("copyPaste") or data_obj.get("qrcodeUrl")
+            
             if pix_code:
                 return {"pix_code": pix_code}
-        return None
+        else:
+            # Retorna o erro exato da MisticPay para você depurar
+            return {"erro": f"HTTP {response.status_code} - {response.text}"}
+            
     except Exception as e:
-        logger.error(f"Erro de conexao MisticPay: {e}")
-        return None
+        logger.error(f"Erro de conexão MisticPay: {e}")
+        return {"erro": str(e)}
+        
+    return None
 
 # ==================== CONTROLE CANAL & MENUS ====================
 async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
