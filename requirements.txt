@@ -6,3 +6,5 @@ python-telegram-bot>=20.0
 fastapi
 uvicorn
 requests
+qrcode
+Pillow
