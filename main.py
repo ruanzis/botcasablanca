@@ -32,10 +32,8 @@ LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
 
 # Credenciais MisticPay
-MISTICPAY_API_URL = "https://api.misticpay.com/api"
 MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
 MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc1syoymxugk3h")
-
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
 POLITICA_REEMBOLSO = (
@@ -45,7 +43,6 @@ POLITICA_REEMBOLSO = (
     "com vídeo mostrando cartão, valor e erro."
 )
 
-# Banco de Dados de Saldo em Memória {telegram_id: float}
 SALDO_USUARIOS = {}
 
 CATALOGO_UNITARIAS = [
@@ -96,28 +93,35 @@ telegram_app = Application.builder().token(TOKEN).build()
 
 # ==================== MISTICPAY API INTEGRACAO ====================
 def gerar_pix_misticpay(valor: float, telegram_id: int):
-    url = f"{MISTICPAY_API_URL}/transactions/create"
+    url = "https://api.misticpay.com/api/transactions/create"
     headers = {
         "ci": MISTICPAY_CLIENT_ID,
         "cs": MISTICPAY_CLIENT_SECRET,
         "Content-Type": "application/json",
     }
+    
+    # Envia o valor limpo sem decimais
     payload = {
-        "value": valor,
+        "value": int(valor),
         "external_id": f"user_{telegram_id}",
         "projectWebhook": f"{WEBHOOK_BASE_URL}/misticpay-webhook",
     }
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=12)
+        logger.info(f"MisticPay Response Status: {response.status_code}")
+        logger.info(f"MisticPay Response Body: {response.text}")
+
         if response.status_code in [200, 201]:
             res = response.json()
-            qr_code = res.get("qrCode") or res.get("pixCopiaECola") or res.get("copyPaste")
-            return {"pix_code": qr_code}
-        logger.error(f"Erro MisticPay [{response.status_code}]: {response.text}")
+            qr_code = res.get("qrCode") or res.get("pixCopiaECola") or res.get("copyPaste") or res.get("emv")
+            if not qr_code and "data" in res:
+                qr_code = res["data"].get("qrCode") or res["data"].get("pixCopiaECola") or res["data"].get("copyPaste")
+            if qr_code:
+                return {"pix_code": qr_code}
         return None
     except Exception as e:
-        logger.error(f"Erro conexão MisticPay: {e}")
+        logger.error(f"Erro de conexao MisticPay: {e}")
         return None
 
 # ==================== CONTROLE CANAL & MENUS ====================
@@ -126,7 +130,7 @@ async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
         membro = await context.bot.get_chat_member(chat_id=ID_CANAL, user_id=user_id)
         return membro.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.warning(f"Erro validação canal: {e}")
+        logger.warning(f"Erro validacao canal: {e}")
         return True
 
 async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -184,7 +188,7 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         valor = float(context.args[0])
         if valor < 1.0:
-            await update.message.reply_text("⚠️ O valor mínimo para depósito por PIX é R$ 1,00.")
+            await update.message.reply_text("⚠️ O valor mínimo para depósito é R$ 1,00.")
             return
     except (IndexError, ValueError):
         await update.message.reply_text("⚠️ Uso correto: <code>/pix 20</code>", parse_mode="HTML")
@@ -194,14 +198,14 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if dados_pix and dados_pix.get("pix_code"):
         pix_code = dados_pix["pix_code"]
         msg = (
-            f"💳 <b>PAGAMENTO VIA PIX GENERADO</b>\n\n"
-            f"<b>Valor:</b> R$ {valor:,.2f}\n\n"
+            f"💳 <b>PAGAMENTO VIA PIX GERADO</b>\n\n"
+            f"<b>Valor:</b> R$ {int(valor)},00\n\n"
             f"Copie o código abaixo e pague no seu app de banco:\n\n"
             f"<code>{pix_code}</code>"
-        ).replace(",", "X").replace(".", ",").replace("X", ".")
+        )
         await update.message.reply_text(msg, parse_mode="HTML")
     else:
-        await update.message.reply_text("❌ Falha ao gerar PIX MisticPay. Verifique a API ou tente novamente.")
+        await update.message.reply_text("❌ Falha ao gerar PIX MisticPay. Verifique suas credenciais de API.")
 
 # ==================== PESQUISA POR BIN (INLINE) ====================
 async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
