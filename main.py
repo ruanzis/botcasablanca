@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import random
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -92,25 +93,33 @@ DADOS_CARTOES = [
 
 telegram_app = Application.builder().token(TOKEN).build()
 
-# ==================== MISTICPAY API INTEGRACAO (AJUSTADA PELA DOC) ====================
+# ==================== FUNÇÕES AUXILIARES ====================
+def gerar_cpf_valido() -> str:
+    """Gera um CPF sintático válido para aprovação no gateway."""
+    cpf = [random.randint(0, 9) for _ in range(9)]
+    for _ in range(2):
+        val = sum([(len(cpf) + 1 - i) * v for i, v in enumerate(cpf)]) % 11
+        cpf.append(0 if val < 2 else 11 - val)
+    return "".join(map(str, cpf))
+
+# ==================== INTEGRACAO MISTICPAY API ====================
 def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
     url = "https://api.misticpay.com/api/transactions/create"
     headers = {
-        "ci": MISTICPAY_CLIENT_ID,
-        "cs": MISTICPAY_CLIENT_SECRET,
+        "ci": MISTICPAY_CLIENT_ID.strip(),
+        "cs": MISTICPAY_CLIENT_SECRET.strip(),
         "Content-Type": "application/json",
     }
     
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
-    # Payload exato exigido pela MisticPay
     payload = {
-        "amount": valor,
+        "amount": float(valor),
         "payerName": nome_usuario if nome_usuario else f"Cliente_{telegram_id}",
-        "payerDocument": "12345678909",  # CPF fictício sem formatação
+        "payerDocument": gerar_cpf_valido(),
         "transactionId": transaction_id,
-        "description": f"Deposito Saldo User {telegram_id}",
-        "projectWebhook": f"{WEBHOOK_BASE_URL}/misticpay-webhook"
+        "description": f"Deposito Saldo Bot User {telegram_id}",
+        "projectWebhook": f"{WEBHOOK_BASE_URL.rstrip('/')}/misticpay-webhook"
     }
 
     try:
@@ -119,23 +128,19 @@ def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
 
         if response.status_code in [200, 201]:
             res = response.json()
-            # MisticPay retorna 'copyPaste' para o Pix Copia e Cola
             data_obj = res.get("data", {})
-            pix_code = data_obj.get("copyPaste") or data_obj.get("qrcodeUrl")
+            pix_code = data_obj.get("copyPaste") or data_obj.get("qrcodeUrl") or data_obj.get("qrCodeBase64")
             
             if pix_code:
                 return {"pix_code": pix_code}
-        else:
-            # Retorna o erro exato da MisticPay para você depurar
-            return {"erro": f"HTTP {response.status_code} - {response.text}"}
+        
+        return {"erro": f"Status {response.status_code}: {response.text}"}
             
     except Exception as e:
-        logger.error(f"Erro de conexão MisticPay: {e}")
-        return {"erro": str(e)}
-        
-    return None
+        logger.error(f"Exceção de conexão MisticPay: {e}")
+        return {"erro": f"Falha de conexão: {str(e)}"}
 
-# ==================== CONTROLE CANAL & MENUS ====================
+# ==================== GERENCIAMENTO DO CANAL E MENUS ====================
 async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     try:
         membro = await context.bot.get_chat_member(chat_id=ID_CANAL, user_id=user_id)
@@ -178,7 +183,7 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
 
     await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=reply_markup, parse_mode="HTML")
 
-# ==================== COMANDOS ====================
+# ==================== COMANDOS TELEGRAM ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if await esta_no_canal(context, user_id):
@@ -207,7 +212,8 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     dados_pix = gerar_pix_misticpay(valor, user_id, user.first_name)
-    if dados_pix and dados_pix.get("pix_code"):
+    
+    if dados_pix and "pix_code" in dados_pix:
         pix_code = dados_pix["pix_code"]
         msg = (
             f"💳 <b>PAGAMENTO VIA PIX GERADO</b>\n\n"
@@ -216,10 +222,12 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<code>{pix_code}</code>"
         ).replace(",", "X").replace(".", ",").replace("X", ".")
         await update.message.reply_text(msg, parse_mode="HTML")
+    elif dados_pix and "erro" in dados_pix:
+        await update.message.reply_text(f"❌ <b>Retorno MisticPay:</b>\n<code>{dados_pix['erro']}</code>", parse_mode="HTML")
     else:
-        await update.message.reply_text("❌ Falha ao gerar PIX MisticPay. Verifique a API ou tente novamente.")
+        await update.message.reply_text("❌ Erro desconhecido ao processar a requisição.")
 
-# ==================== PESQUISA POR BIN (INLINE) ====================
+# ==================== PESQUISA INLINE (BIN) ====================
 async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query.strip().lower()
     results = []
@@ -261,7 +269,7 @@ async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.inline_query.answer(results, cache_time=1)
 
-# ==================== CALLBACKS E COMPRAS ====================
+# ==================== CALLBACKS DO BOT ====================
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -396,7 +404,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await enviar_menu_principal(update, context)
 
-# Registra Handlers
+# Registrar Handlers no App Telegram
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
 telegram_app.add_handler(InlineQueryHandler(inline_bin_search))
@@ -432,7 +440,6 @@ async def misticpay_webhook(request: Request):
         value = float(payload.get("value", 0))
         description = payload.get("description", "")
 
-        # Pega o ID do usuario a partir da descricao
         if status == "COMPLETO" and "User " in description:
             user_id = int(description.split("User ")[1])
             SALDO_USUARIOS[user_id] = SALDO_USUARIOS.get(user_id, 0.0) + value
