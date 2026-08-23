@@ -40,8 +40,8 @@ LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
 
-# Imagem Ilustrativa dos Cartões (Utilizada nas buscas Inline)
-THUMB_CARD_URL = "https://i.imgur.com/v8S4P1M.png"  # Cartão Preto Ilustrativo
+# Imagem Ilustrativa dos Cartões
+THUMB_CARD_URL = "https://i.imgur.com/v8S4P1M.png"
 
 # Credenciais MisticPay
 MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
@@ -56,7 +56,30 @@ POLITICA_REEMBOLSO = (
 )
 
 SALDO_USUARIOS = {}
-CACHE_CANAL = {}  # Cache temporário para checagem rápida
+CACHE_CANAL = {}
+
+def identificar_bandeira(bin_code: str) -> str:
+    """Identifica automaticamente a bandeira com base na BIN e atribui a logo."""
+    bin_str = str(bin_code).strip()
+    if not bin_str:
+        return "DESCONHECIDA 💳"
+    
+    if bin_str.startswith("4"):
+        return "VISA 🔵"
+    elif bin_str.startswith(("51", "52", "53", "54", "55")) or (2221 <= int(bin_str[:4]) <= 2720 if len(bin_str) >= 4 and bin_str[:4].isdigit() else False):
+        return "MASTERCARD 🔴🟡"
+    elif bin_str.startswith(("34", "37")):
+        return "AMEX 🟢"
+    elif bin_str.startswith(("4011", "4389", "4514", "4576", "5041", "5066", "5090", "5094", "6362", "6363")):
+        return "ELO 🟡🔴🔵"
+    elif bin_str.startswith(("6011", "65")):
+        return "DISCOVER 🟠"
+    elif bin_str.startswith(("301", "305", "36", "38")):
+        return "DINERS ⚪"
+    elif bin_str.startswith(("3528", "3589")):
+        return "JCB 🟢🔴🔵"
+    else:
+        return "OUTRAS 💳"
 
 CATALOGO_UNITARIAS = [
     {"id": "unit_0", "nome": "PLATINUM", "preco": 80.0, "qtd": 525},
@@ -77,7 +100,6 @@ DADOS_CARTOES = [
         "cc": "542819******0150|08|2028|306",
         "banco": "BANCO GENIAL SA",
         "categoria": "FULL PLATINUM",
-        "bandeira": "MASTERCARD",
         "tipo": "CREDIT",
         "nome": "CRISTIANO CACHEIRO MAHIA",
         "cpf": "03250698679",
@@ -92,7 +114,6 @@ DADOS_CARTOES = [
         "cc": "544169******0487|05|2029|931",
         "banco": "ITAU UNIBANCO, S.A.",
         "categoria": "PLATINUM",
-        "bandeira": "VISA",
         "tipo": "CREDIT",
         "nome": "ALEXANDRE CARVALHO CHANAN",
         "cpf": "18319050006",
@@ -102,11 +123,28 @@ DADOS_CARTOES = [
         "saldo_minimo": 1200.00,
         "vendido": False,
     },
+    {
+        "id": "card_3",
+        "cc": "509423******7847",
+        "banco": "PLUXEE INSTITUICAO DE PAGAMENTO BRASIL SA",
+        "categoria": "PREPAID MULTIPLE VOUCHER",
+        "tipo": "DEBIT",
+        "nome": "DANIELE SILVA DE OLIVEIRA",
+        "cpf": "09078890690",
+        "bin": "509423",
+        "fornecedor": "Anon",
+        "preco": 50.00,
+        "saldo_minimo": 500.00,
+        "vendido": False,
+    },
 ]
+
+# Atribuição dinâmica da bandeira com logo
+for card in DADOS_CARTOES:
+    card["bandeira"] = identificar_bandeira(card["bin"])
 
 telegram_app = Application.builder().token(TOKEN).build()
 
-# ==================== FUNÇÕES AUXILIARES ====================
 def gerar_cpf_valido() -> str:
     cpf = [random.randint(0, 9) for _ in range(9)]
     for _ in range(2):
@@ -128,7 +166,6 @@ async def expirador_pix(chat_id: int, message_id: int, valor: float, segundos: i
         logger.warning(f"Erro ao apagar mensagem expirada: {e}")
 
 async def anti_sleep_ping():
-    """Garante resposta instantânea mantendo a hospedagem ativa."""
     async with httpx.AsyncClient() as client:
         while True:
             await asyncio.sleep(300)
@@ -137,7 +174,6 @@ async def anti_sleep_ping():
             except Exception:
                 pass
 
-# ==================== INTEGRACAO MISTICPAY API ====================
 async def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
     url = "https://api.misticpay.com/api/transactions/create"
     headers = {
@@ -145,7 +181,6 @@ async def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str)
         "cs": MISTICPAY_CLIENT_SECRET.strip(),
         "Content-Type": "application/json",
     }
-    
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
     payload = {
@@ -171,7 +206,6 @@ async def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str)
     except Exception as e:
         return {"erro": f"Falha de conexão: {str(e)}"}
 
-# ==================== VERIFICAÇÃO DE CANAL ====================
 async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     agora = time.time()
     if user_id in CACHE_CANAL and (agora - CACHE_CANAL[user_id]) < 600:
@@ -223,7 +257,6 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
         chat_id=chat_id, text=texto, reply_markup=reply_markup, parse_mode="HTML", reply_to_message_id=reply_to_id
     )
 
-# ==================== COMANDOS TELEGRAM ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     msg_id = update.message.message_id
@@ -293,7 +326,6 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif dados_pix and "erro" in dados_pix:
         await update.message.reply_text(f"❌ <b>Retorno MisticPay:</b>\n<code>{dados_pix['erro']}</code>", parse_mode="HTML", reply_to_message_id=msg_id)
 
-# ==================== IA SIMPLES DE ATENDIMENTO ====================
 async def IA_atendimento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.lower()
     msg_id = update.message.message_id
@@ -314,7 +346,6 @@ async def IA_atendimento(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(resposta, parse_mode="HTML", reply_to_message_id=msg_id)
 
-# ==================== PESQUISA INLINE (BIN, BANCO, NÍVEL E BANDEIRA) ====================
 async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query.strip().lower()
     results = []
@@ -333,7 +364,7 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for item in cartoes_filtrados:
         texto_resposta = (
-            f"Número do Cartão: {item['cc'][:12]}****\n"
+            f"Número do Cartão: {item['cc']}\n"
             f"Banco: {item['banco']}\n"
             f"Categoria: {item['categoria']}\n"
             f"Bandeira: {item['bandeira']}\n"
@@ -341,7 +372,7 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"NOME: {item['nome']}\n"
             f"CPF: {item['cpf']}\n\n"
             f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:,.2f}</b>\n"
-            f"Se o saldo for menor, solicite reembolso conforme a <b>Política de Reembolso</b>.\n\n"
+            f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a Política de Reembolso.\n\n"
             f"Valor da Compra: R$ {item['preco']:,.2f}\n\n"
             f"Fornecedor: <i>{item['fornecedor']}</i>"
         ).replace(",", "X").replace(".", ",").replace("X", ".")
@@ -358,8 +389,8 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         results.append(
             InlineQueryResultArticle(
                 id=item["id"],
-                title=f"R$ {item['preco']:.2f} - {item['bin']} - {item['banco']}",
-                description=f"Nível: {item['categoria']} - Full: ✅\nFornecedor: {item['fornecedor']}",
+                title=f"R$ {item['preco']:.2f} - {item['bin']} - {item['bandeira']}",
+                description=f"Banco: {item['banco']}\nNível: {item['categoria']} | Full: ✅",
                 thumbnail_url=THUMB_CARD_URL,
                 input_message_content=InputTextMessageContent(texto_resposta, parse_mode="HTML"),
                 reply_markup=InlineKeyboardMarkup(keyboard),
@@ -368,7 +399,6 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.inline_query.answer(results, cache_time=1)
 
-# ==================== CALLBACKS DO BOT ====================
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -492,7 +522,8 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"<b>Dados do Cartão:</b>\n<code>{card['cc']}</code>\n"
                     f"<b>Nome:</b> {card['nome']}\n"
                     f"<b>CPF:</b> {card['cpf']}\n"
-                    f"<b>Banco:</b> {card['banco']}\n\n"
+                    f"<b>Banco:</b> {card['banco']}\n"
+                    f"<b>Bandeira:</b> {card['bandeira']}\n\n"
                     f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
                     parse_mode="HTML",
                 )
@@ -504,14 +535,12 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await enviar_menu_principal(update, context)
 
-# Registrar Handlers
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
 telegram_app.add_handler(InlineQueryHandler(inline_search))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
 
-# ==================== FASTAPI APP & WEBHOOKS ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await telegram_app.initialize()
