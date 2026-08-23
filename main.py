@@ -104,6 +104,20 @@ def gerar_cpf_valido() -> str:
         cpf.append(0 if val < 2 else 11 - val)
     return "".join(map(str, cpf))
 
+async def expirador_pix(chat_id: int, message_id: int, valor: float, segundos: int = 1800):
+    """Aguarda o tempo limite e apaga o QR Code expirado."""
+    await asyncio.sleep(segundos)
+    try:
+        await telegram_app.bot.delete_message(chat_id=chat_id, message_id=message_id)
+        valor_formatado = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        await telegram_app.bot.send_message(
+            chat_id=chat_id,
+            text=f"⏳ <b>QRCODE expirado por tempo limitado.</b>\nPara recarregar novamente, digite <code>/pix {valor_formatado}</code>.",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.warning(f"Não foi possível apagar a mensagem expirada {message_id}: {e}")
+
 # ==================== INTEGRACAO MISTICPAY API ====================
 def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
     url = "https://api.misticpay.com/api/transactions/create"
@@ -115,7 +129,6 @@ def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
     
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
-    # Validade ajustada para 30 minutos (1800 segundos)
     payload = {
         "amount": float(valor),
         "payerName": nome_usuario if nome_usuario else f"Cliente_{telegram_id}",
@@ -220,25 +233,36 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if dados_pix and "pix_code" in dados_pix:
         pix_code = dados_pix["pix_code"]
         
-        # Gerando imagem QR Code em memória
+        # Gera imagem do QR Code
         qr_img = qrcode.make(pix_code)
         img_buffer = io.BytesIO()
         qr_img.save(img_buffer, format="PNG")
         img_buffer.seek(0)
 
+        valor_formatado = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
         msg = (
-            f"💳 <b>PAGAMENTO VIA PIX GERADO</b>\n\n"
-            f"💰 <b>Valor:</b> R$ {valor:,.2f}\n"
+            f"💳 <b>PAGAMENTO VIA PIX GERADO - CasablancaShop</b>\n\n"
+            f"💰 <b>Valor:</b> R$ {valor_formatado}\n"
             f"⏳ <b>Validade:</b> 30 minutos\n\n"
             f"Escaneie o QR Code acima ou copie o código abaixo:\n\n"
             f"<code>{pix_code}</code>"
-        ).replace(",", "X").replace(".", ",").replace("X", ".")
+        )
 
-        await update.message.reply_photo(
+        msg_enviada = await update.message.reply_photo(
             photo=img_buffer,
             caption=msg,
             parse_mode="HTML"
         )
+
+        # Inicia temporizador de 30 minutos (1800 segundos) para expirar e apagar a foto
+        asyncio.create_task(expirador_pix(
+            chat_id=msg_enviada.chat_id,
+            message_id=msg_enviada.message_id,
+            valor=valor,
+            segundos=1800
+        ))
+
     elif dados_pix and "erro" in dados_pix:
         await update.message.reply_text(f"❌ <b>Retorno MisticPay:</b>\n<code>{dados_pix['erro']}</code>", parse_mode="HTML")
     else:
