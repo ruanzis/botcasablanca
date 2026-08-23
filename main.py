@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 import qrcode
-import requests
+import httpx
 import uvicorn
 from telegram import (
     InlineKeyboardButton,
@@ -22,6 +22,8 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     InlineQueryHandler,
+    MessageHandler,
+    filters,
 )
 
 # Configuração de Logs
@@ -33,10 +35,13 @@ TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPV
 ID_CANAL = os.getenv("ID_CANAL", "-1004302224747")
 
 # Links de Canais
-LINK_CANAL_VERIFICACAO = "https://t.me/oficialharidade"  # Utilizado na tela inicial de bloqueio
-LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")  # Utilizado no menu principal
+LINK_CANAL_VERIFICACAO = "https://t.me/oficialharidade"
+LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
+
+# Imagem Ilustrativa dos Cartões (Utilizada nas buscas Inline)
+THUMB_CARD_URL = "https://i.imgur.com/v8S4P1M.png"  # Cartão Preto Ilustrativo
 
 # Credenciais MisticPay
 MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
@@ -51,6 +56,7 @@ POLITICA_REEMBOLSO = (
 )
 
 SALDO_USUARIOS = {}
+CACHE_CANAL = {}  # Cache temporário para checagem rápida
 
 CATALOGO_UNITARIAS = [
     {"id": "unit_0", "nome": "PLATINUM", "preco": 80.0, "qtd": 525},
@@ -71,6 +77,7 @@ DADOS_CARTOES = [
         "cc": "542819******0150|08|2028|306",
         "banco": "BANCO GENIAL SA",
         "categoria": "FULL PLATINUM",
+        "bandeira": "MASTERCARD",
         "tipo": "CREDIT",
         "nome": "CRISTIANO CACHEIRO MAHIA",
         "cpf": "03250698679",
@@ -85,6 +92,7 @@ DADOS_CARTOES = [
         "cc": "544169******0487|05|2029|931",
         "banco": "ITAU UNIBANCO, S.A.",
         "categoria": "PLATINUM",
+        "bandeira": "VISA",
         "tipo": "CREDIT",
         "nome": "ALEXANDRE CARVALHO CHANAN",
         "cpf": "18319050006",
@@ -100,7 +108,6 @@ telegram_app = Application.builder().token(TOKEN).build()
 
 # ==================== FUNÇÕES AUXILIARES ====================
 def gerar_cpf_valido() -> str:
-    """Gera um CPF sintático válido para aprovação no gateway."""
     cpf = [random.randint(0, 9) for _ in range(9)]
     for _ in range(2):
         val = sum([(len(cpf) + 1 - i) * v for i, v in enumerate(cpf)]) % 11
@@ -108,7 +115,6 @@ def gerar_cpf_valido() -> str:
     return "".join(map(str, cpf))
 
 async def expirador_pix(chat_id: int, message_id: int, valor: float, segundos: int = 1800):
-    """Aguarda o tempo limite e apaga o QR Code expirado."""
     await asyncio.sleep(segundos)
     try:
         await telegram_app.bot.delete_message(chat_id=chat_id, message_id=message_id)
@@ -119,10 +125,20 @@ async def expirador_pix(chat_id: int, message_id: int, valor: float, segundos: i
             parse_mode="HTML"
         )
     except Exception as e:
-        logger.warning(f"Não foi possível apagar a mensagem expirada {message_id}: {e}")
+        logger.warning(f"Erro ao apagar mensagem expirada: {e}")
+
+async def anti_sleep_ping():
+    """Garante resposta instantânea mantendo a hospedagem ativa."""
+    async with httpx.AsyncClient() as client:
+        while True:
+            await asyncio.sleep(300)
+            try:
+                await client.get(f"{WEBHOOK_BASE_URL.rstrip('/')}/")
+            except Exception:
+                pass
 
 # ==================== INTEGRACAO MISTICPAY API ====================
-def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
+async def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
     url = "https://api.misticpay.com/api/transactions/create"
     headers = {
         "ci": MISTICPAY_CLIENT_ID.strip(),
@@ -143,33 +159,33 @@ def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
     }
 
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=12)
-        logger.info(f"MisticPay Response [{response.status_code}]: {response.text}")
-
-        if response.status_code in [200, 201]:
-            res = response.json()
-            data_obj = res.get("data", {})
-            pix_code = data_obj.get("copyPaste") or data_obj.get("qrcodeUrl") or data_obj.get("qrCodeBase64")
-            
-            if pix_code:
-                return {"pix_code": pix_code}
-        
-        return {"erro": f"Status {response.status_code}: {response.text}"}
-            
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, headers=headers, timeout=10.0)
+            if response.status_code in [200, 201]:
+                res = response.json()
+                data_obj = res.get("data", {})
+                pix_code = data_obj.get("copyPaste") or data_obj.get("qrcodeUrl") or data_obj.get("qrCodeBase64")
+                if pix_code:
+                    return {"pix_code": pix_code}
+            return {"erro": f"Status {response.status_code}: {response.text}"}
     except Exception as e:
-        logger.error(f"Exceção de conexão MisticPay: {e}")
         return {"erro": f"Falha de conexão: {str(e)}"}
 
-# ==================== GERENCIAMENTO DO CANAL E MENUS ====================
+# ==================== VERIFICAÇÃO DE CANAL ====================
 async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
+    agora = time.time()
+    if user_id in CACHE_CANAL and (agora - CACHE_CANAL[user_id]) < 600:
+        return True
     try:
         membro = await context.bot.get_chat_member(chat_id=ID_CANAL, user_id=user_id)
-        return membro.status in ["member", "administrator", "creator"]
-    except Exception as e:
-        logger.warning(f"Erro validacao canal: {e}")
+        no_canal = membro.status in ["member", "administrator", "creator"]
+        if no_canal:
+            CACHE_CANAL[user_id] = agora
+        return no_canal
+    except Exception:
         return True
 
-async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE, reply_to_id: int = None):
     user = update.effective_user
     primeiro_nome = user.first_name if user else "Cliente"
 
@@ -196,18 +212,24 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
     if os.path.exists(CAPA_PATH):
         try:
             with open(CAPA_PATH, "rb") as photo:
-                await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=texto, reply_markup=reply_markup, parse_mode="HTML")
+                await context.bot.send_photo(
+                    chat_id=chat_id, photo=photo, caption=texto, reply_markup=reply_markup, parse_mode="HTML", reply_to_message_id=reply_to_id
+                )
                 return
-        except Exception as e:
-            logger.error(f"Erro capa: {e}")
+        except Exception:
+            pass
 
-    await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=reply_markup, parse_mode="HTML")
+    await context.bot.send_message(
+        chat_id=chat_id, text=texto, reply_markup=reply_markup, parse_mode="HTML", reply_to_message_id=reply_to_id
+    )
 
 # ==================== COMANDOS TELEGRAM ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    msg_id = update.message.message_id
+    
     if await esta_no_canal(context, user_id):
-        await enviar_menu_principal(update, context)
+        await enviar_menu_principal(update, context, reply_to_id=msg_id)
     else:
         keyboard = [
             [InlineKeyboardButton("📢 Entrar no Canal", url=LINK_CANAL_VERIFICACAO)],
@@ -217,26 +239,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ <b>ACESSO BLOQUEADO!</b>\n\nPara acessar nosso bot, entre no canal oficial.",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="HTML",
+            reply_to_message_id=msg_id
         )
 
 async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
+    msg_id = update.message.message_id
+
     try:
         valor = float(context.args[0])
         if valor < 20.0:
-            await update.message.reply_text("⚠️ <b>O valor mínimo para depósito é R$ 20,00.</b>", parse_mode="HTML")
+            await update.message.reply_text("⚠️ <b>O valor mínimo para depósito é R$ 20,00.</b>", parse_mode="HTML", reply_to_message_id=msg_id)
             return
     except (IndexError, ValueError):
-        await update.message.reply_text("⚠️ Uso correto: <code>/pix 20</code> (Mínimo: R$ 20,00)", parse_mode="HTML")
+        await update.message.reply_text("⚠️ Uso correto: <code>/pix 20</code> (Mínimo: R$ 20,00)", parse_mode="HTML", reply_to_message_id=msg_id)
         return
 
-    dados_pix = gerar_pix_misticpay(valor, user_id, user.first_name)
+    dados_pix = await gerar_pix_misticpay(valor, user_id, user.first_name)
     
     if dados_pix and "pix_code" in dados_pix:
         pix_code = dados_pix["pix_code"]
         
-        # Gera imagem do QR Code
         qr_img = qrcode.make(pix_code)
         img_buffer = io.BytesIO()
         qr_img.save(img_buffer, format="PNG")
@@ -255,10 +279,10 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg_enviada = await update.message.reply_photo(
             photo=img_buffer,
             caption=msg,
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_to_message_id=msg_id
         )
 
-        # Temporizador de 30 minutos para apagar a foto e enviar alerta de expiração
         asyncio.create_task(expirador_pix(
             chat_id=msg_enviada.chat_id,
             message_id=msg_enviada.message_id,
@@ -267,22 +291,52 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ))
 
     elif dados_pix and "erro" in dados_pix:
-        await update.message.reply_text(f"❌ <b>Retorno MisticPay:</b>\n<code>{dados_pix['erro']}</code>", parse_mode="HTML")
-    else:
-        await update.message.reply_text("❌ Erro desconhecido ao processar a requisição.")
+        await update.message.reply_text(f"❌ <b>Retorno MisticPay:</b>\n<code>{dados_pix['erro']}</code>", parse_mode="HTML", reply_to_message_id=msg_id)
 
-# ==================== PESQUISA INLINE (BIN) ====================
-async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ==================== IA SIMPLES DE ATENDIMENTO ====================
+async def IA_atendimento(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    texto = update.message.text.lower()
+    msg_id = update.message.message_id
+    
+    if any(p in texto for p in ["saldo", "deposito", "pix", "comprar"]):
+        resposta = (
+            "🤖 <b>Assistente Casablanca:</b>\n\n"
+            "Para adicionar saldo instantaneamente, digite <code>/pix valor</code> no chat.\n"
+            "Exemplo: <code>/pix 20</code>"
+        )
+    elif any(p in texto for p in ["suporte", "ajuda", "dono", "admin"]):
+        resposta = f"🤖 <b>Atendimento Humano:</b>\n\nFale diretamente com nosso suporte: {LINK_SUPORTE}"
+    else:
+        resposta = (
+            "🤖 <b>Assistente Casablanca:</b>\n\n"
+            "Para navegar pelo catálogo completo e acessar as funções do bot, envie o comando /start."
+        )
+
+    await update.message.reply_text(resposta, parse_mode="HTML", reply_to_message_id=msg_id)
+
+# ==================== PESQUISA INLINE (BIN, BANCO, NÍVEL E BANDEIRA) ====================
+async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query.strip().lower()
     results = []
 
-    cartoes_filtrados = [c for c in DADOS_CARTOES if not c["vendido"] and query in c["bin"].lower()] if query else [c for c in DADOS_CARTOES if not c["vendido"]]
+    cartoes_filtrados = []
+    for c in DADOS_CARTOES:
+        if c["vendido"]:
+            continue
+        if not query or (
+            query in c["bin"].lower() or 
+            query in c["banco"].lower() or 
+            query in c["categoria"].lower() or 
+            query in c["bandeira"].lower()
+        ):
+            cartoes_filtrados.append(c)
 
     for item in cartoes_filtrados:
         texto_resposta = (
             f"Número do Cartão: {item['cc'][:12]}****\n"
             f"Banco: {item['banco']}\n"
             f"Categoria: {item['categoria']}\n"
+            f"Bandeira: {item['bandeira']}\n"
             f"Tipo: {item['tipo']}\n"
             f"NOME: {item['nome']}\n"
             f"CPF: {item['cpf']}\n\n"
@@ -306,6 +360,7 @@ async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 id=item["id"],
                 title=f"R$ {item['preco']:.2f} - {item['bin']} - {item['banco']}",
                 description=f"Nível: {item['categoria']} - Full: ✅\nFornecedor: {item['fornecedor']}",
+                thumbnail_url=THUMB_CARD_URL,
                 input_message_content=InputTextMessageContent(texto_resposta, parse_mode="HTML"),
                 reply_markup=InlineKeyboardMarkup(keyboard),
             )
@@ -328,6 +383,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
 
     if data == "verificar":
+        CACHE_CANAL.pop(user_id, None)
         if await esta_no_canal(context, user_id):
             await query.message.delete()
             await enviar_menu_principal(update, context)
@@ -362,12 +418,12 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("🔢 Unitárias", callback_data="ver_unitarias")],
             [
-                InlineKeyboardButton("📊 Nível", callback_data="nivel"),
+                InlineKeyboardButton("📊 Nível", switch_inline_query_current_chat=""),
                 InlineKeyboardButton("🔍 Bin", switch_inline_query_current_chat=""),
             ],
             [
-                InlineKeyboardButton("🏦 banco", callback_data="banco"),
-                InlineKeyboardButton("🇧🇷 Bandeira", callback_data="bandeira"),
+                InlineKeyboardButton("🏦 Banco", switch_inline_query_current_chat=""),
+                InlineKeyboardButton("🇧🇷 Bandeira", switch_inline_query_current_chat=""),
             ],
             [InlineKeyboardButton("💬 Atendimento/suporte", url=LINK_SUPORTE)],
             [InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")],
@@ -451,8 +507,9 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Registrar Handlers
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
-telegram_app.add_handler(InlineQueryHandler(inline_bin_search))
+telegram_app.add_handler(InlineQueryHandler(inline_search))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
 
 # ==================== FASTAPI APP & WEBHOOKS ====================
 @asynccontextmanager
@@ -461,6 +518,7 @@ async def lifespan(app: FastAPI):
     await telegram_app.start()
     webhook_url = f"{WEBHOOK_BASE_URL.rstrip('/')}/telegram-webhook"
     await telegram_app.bot.set_webhook(url=webhook_url)
+    asyncio.create_task(anti_sleep_ping())
     yield
     await telegram_app.stop()
     await telegram_app.shutdown()
@@ -478,8 +536,6 @@ async def telegram_webhook(request: Request):
 async def misticpay_webhook(request: Request):
     try:
         payload = await request.json()
-        logger.info(f"Webhook MisticPay recebido: {payload}")
-
         status = payload.get("status")
         value = float(payload.get("value", 0))
         description = payload.get("description", "")
@@ -497,7 +553,6 @@ async def misticpay_webhook(request: Request):
 
         return {"status": "ok"}
     except Exception as e:
-        logger.error(f"Erro webhook MisticPay: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.get("/")
