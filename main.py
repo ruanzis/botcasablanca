@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import random
+import re
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -34,16 +35,13 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
 ID_CANAL = os.getenv("ID_CANAL", "-1004302224747")
 
-# Links de Canais
 LINK_CANAL_VERIFICACAO = "https://t.me/oficialharidade"
 LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
 
-# Imagem Ilustrativa dos Cartões
 THUMB_CARD_URL = "https://i.imgur.com/v8S4P1M.png"
 
-# Credenciais MisticPay
 MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
 MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc1syoymxugk3h")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
@@ -58,28 +56,187 @@ POLITICA_REEMBOLSO = (
 SALDO_USUARIOS = {}
 CACHE_CANAL = {}
 
-def identificar_bandeira(bin_code: str) -> str:
-    """Identifica automaticamente a bandeira com base na BIN e atribui a logo."""
-    bin_str = str(bin_code).strip()
-    if not bin_str:
-        return "DESCONHECIDA 💳"
-    
-    if bin_str.startswith("4"):
-        return "VISA 🔵"
-    elif bin_str.startswith(("51", "52", "53", "54", "55")) or (2221 <= int(bin_str[:4]) <= 2720 if len(bin_str) >= 4 and bin_str[:4].isdigit() else False):
-        return "MASTERCARD 🔴🟡"
-    elif bin_str.startswith(("34", "37")):
-        return "AMEX 🟢"
-    elif bin_str.startswith(("4011", "4389", "4514", "4576", "5041", "5066", "5090", "5094", "6362", "6363")):
-        return "ELO 🟡🔴🔵"
-    elif bin_str.startswith(("6011", "65")):
-        return "DISCOVER 🟠"
-    elif bin_str.startswith(("301", "305", "36", "38")):
-        return "DINERS ⚪"
-    elif bin_str.startswith(("3528", "3589")):
-        return "JCB 🟢🔴🔵"
+# --- MOTOR DE AUTOMAÇÃO E EDIFICAÇÃO DE ESTOQUE ---
+
+def identificar_bin(cc_number: str) -> str:
+    """Extrai exatamente os 6 primeiros dígitos numéricos do cartão."""
+    apenas_numeros = re.sub(r"\D", "", str(cc_number))
+    return apenas_numeros[:6] if len(apenas_numeros) >= 6 else "000000"
+
+def mascarar_cartao(cc_full: str) -> str:
+    """Mascara o cartão preservando os 6 primeiros e os 4 últimos dígitos."""
+    partes = cc_full.split("|")
+    num_limpo = re.sub(r"\D", "", partes[0])
+    if len(num_limpo) >= 13:
+        bin_part = num_limpo[:6]
+        last_part = num_limpo[-4:]
+        num_mascarado = f"{bin_part}******{last_part}"
     else:
-        return "OUTRAS 💳"
+        num_mascarado = partes[0]
+    
+    if len(partes) > 1:
+        return f"{num_mascarado}|" + "|".join(partes[1:])
+    return num_mascarado
+
+def identificar_bandeira(bin_code: str) -> str:
+    """Identificação automatizada de bandeira por faixa de BIN."""
+    b = str(bin_code).strip()
+    if not b or len(b) < 6:
+        return "DESCONHECIDA"
+    
+    if b.startswith("4"):
+        return "VISA"
+    elif b.startswith(("51", "52", "53", "54", "55")) or (2221 <= int(b[:4]) <= 2720 if b[:4].isdigit() else False):
+        return "MASTERCARD"
+    elif b.startswith(("34", "37")):
+        return "AMEX"
+    elif b.startswith(("4011", "4389", "4514", "4576", "5041", "5066", "5090", "5094", "6362", "6363", "650", "651", "655")):
+        return "ELO"
+    elif b.startswith(("6011", "65")):
+        return "DISCOVER"
+    elif b.startswith(("301", "305", "36", "38")):
+        return "DINERS"
+    elif b.startswith(("3841", "6062", "6370")):
+        return "HIPERCARD"
+    elif b.startswith(("3528", "3589")):
+        return "JCB"
+    else:
+        return "OUTRAS"
+
+def identificar_banco_por_bin(bin_code: str) -> str:
+    """Reconhecimento automatizado do Banco Emissor através do BIN."""
+    b = str(bin_code).strip()
+    if b.startswith(("470598", "544169", "498406", "525204", "410863", "412171")):
+        return "ITAU UNIBANCO, S.A."
+    elif b.startswith(("542819", "548058")):
+        return "BANCO GENIAL SA"
+    elif b.startswith(("509423", "603689")):
+        return "PLUXEE INSTITUICAO DE PAGAMENTO BRASIL SA"
+    elif b.startswith(("400217", "427168", "512631", "520268")):
+        return "BANCO BRADESCO S.A."
+    elif b.startswith(("451416", "540115", "490172")):
+        return "BANCO DO BRASIL S.A."
+    elif b.startswith(("516292", "550209", "522774")):
+        return "BANCO SANTANDER BRASIL S.A."
+    elif b.startswith(("518029", "516220")):
+        return "NUBANK - NUPAGAMENTOS S.A."
+    elif b.startswith(("506722", "506723", "506724")):
+        return "BANCO INTER S.A."
+    elif b.startswith(("104", "204", "506728")):
+        return "CAIXA ECONOMICA FEDERAL"
+    else:
+        return "BANCO DESCONHECIDO"
+
+def identificar_nivel(categoria_raw: str) -> str:
+    """Padronização limpa de Categoria/Nível."""
+    cat = str(categoria_raw).upper().strip()
+    
+    if "BLACK" in cat:
+        return "BLACK"
+    elif "INFINITE" in cat:
+        return "INFINITE"
+    elif "PLATINUM" in cat:
+        return "PLATINUM"
+    elif "GOLD" in cat or "OURO" in cat:
+        return "GOLD"
+    elif "SIGNATURE" in cat:
+        return "SIGNATURE"
+    elif "PREPAID" in cat or "VOUCHER" in cat:
+        return "PREPAID"
+    elif "BUSINESS" in cat or "CORPORATE" in cat:
+        return "BUSINESS"
+    elif "STANDARD" in cat or "CLASSIC" in cat:
+        return "STANDARD"
+    else:
+        return cat if cat else "STANDARD"
+
+def edificar_item_estoque(card_raw: dict) -> dict:
+    """Reconhece, calcula e edifica todos os campos do cartão no estoque."""
+    cc_bruto = card_raw.get("cc", "")
+    bin_extraida = identificar_bin(cc_bruto)
+    
+    banco_auto = card_raw.get("banco")
+    if not banco_auto or banco_auto == "DESCONHECIDO":
+        banco_auto = identificar_banco_por_bin(bin_extraida)
+
+    bandeira_auto = card_raw.get("bandeira")
+    if not bandeira_auto:
+        bandeira_auto = identificar_bandeira(bin_extraida)
+
+    nivel_auto = identificar_nivel(card_raw.get("categoria", ""))
+
+    return {
+        "id": card_raw.get("id"),
+        "cc_full": cc_bruto,
+        "cc_mascarado": mascarar_cartao(cc_bruto),
+        "bin": bin_extraida,
+        "banco": banco_auto,
+        "bandeira": bandeira_auto,
+        "categoria": card_raw.get("categoria", "STANDARD"),
+        "nivel_formatado": nivel_auto,
+        "tipo": card_raw.get("tipo", "CREDIT").upper(),
+        "nome": card_raw.get("nome", "NÃO INFORMADO").upper(),
+        "cpf": re.sub(r"\D", "", str(card_raw.get("cpf", ""))),
+        "fornecedor": card_raw.get("fornecedor", "Anon"),
+        "preco": float(card_raw.get("preco", 80.0)),
+        "saldo_minimo": float(card_raw.get("saldo_minimo", 1000.0)),
+        "vendido": card_raw.get("vendido", False),
+    }
+
+# CATALOGO DE CARTÕES NO ESTOQUE BRUTO
+ESTOQUE_BRUTO = [
+    {
+        "id": "card_1",
+        "cc": "542819******0150|08|2028|306",
+        "categoria": "FULL PLATINUM",
+        "tipo": "CREDIT",
+        "nome": "CRISTIANO CACHEIRO MAHIA",
+        "cpf": "03250698679",
+        "fornecedor": "Anon",
+        "preco": 80.00,
+        "saldo_minimo": 1200.00,
+        "vendido": False,
+    },
+    {
+        "id": "card_2",
+        "cc": "544169******0487|05|2029|931",
+        "categoria": "PLATINUM",
+        "tipo": "CREDIT",
+        "nome": "ALEXANDRE CARVALHO CHANAN",
+        "cpf": "18319050006",
+        "fornecedor": "Anon",
+        "preco": 80.00,
+        "saldo_minimo": 1200.00,
+        "vendido": False,
+    },
+    {
+        "id": "card_3",
+        "cc": "509423******7847",
+        "categoria": "PREPAID MULTIPLE VOUCHER",
+        "tipo": "DEBIT",
+        "nome": "DANIELE SILVA DE OLIVEIRA",
+        "cpf": "09078890690",
+        "fornecedor": "Anon",
+        "preco": 50.00,
+        "saldo_minimo": 500.00,
+        "vendido": False,
+    },
+    {
+        "id": "card_4",
+        "cc": "470598******5141",
+        "categoria": "PLATINUM",
+        "tipo": "CREDIT",
+        "nome": "ALESSANDRO FERNANDES GOMES PEREIRA",
+        "cpf": "11257194780",
+        "fornecedor": "Anon",
+        "preco": 80.00,
+        "saldo_minimo": 1200.00,
+        "vendido": False,
+    },
+]
+
+# Processamento automatizado para edificação instantânea de todo o estoque
+DADOS_CARTOES = [edificar_item_estoque(item) for item in ESTOQUE_BRUTO]
 
 CATALOGO_UNITARIAS = [
     {"id": "unit_0", "nome": "PLATINUM", "preco": 80.0, "qtd": 525},
@@ -93,55 +250,6 @@ CATALOGO_UNITARIAS = [
     {"id": "unit_8", "nome": "NUBANK GOLD", "preco": 35.0, "qtd": 501},
     {"id": "unit_9", "nome": "NUBANK PLATINUM", "preco": 40.0, "qtd": 430},
 ]
-
-DADOS_CARTOES = [
-    {
-        "id": "card_1",
-        "cc": "542819******0150|08|2028|306",
-        "banco": "BANCO GENIAL SA",
-        "categoria": "FULL PLATINUM",
-        "tipo": "CREDIT",
-        "nome": "CRISTIANO CACHEIRO MAHIA",
-        "cpf": "03250698679",
-        "bin": "542819",
-        "fornecedor": "Anon",
-        "preco": 80.00,
-        "saldo_minimo": 1200.00,
-        "vendido": False,
-    },
-    {
-        "id": "card_2",
-        "cc": "544169******0487|05|2029|931",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "CREDIT",
-        "nome": "ALEXANDRE CARVALHO CHANAN",
-        "cpf": "18319050006",
-        "bin": "544169",
-        "fornecedor": "Anon",
-        "preco": 80.00,
-        "saldo_minimo": 1200.00,
-        "vendido": False,
-    },
-    {
-        "id": "card_3",
-        "cc": "509423******7847",
-        "banco": "PLUXEE INSTITUICAO DE PAGAMENTO BRASIL SA",
-        "categoria": "PREPAID MULTIPLE VOUCHER",
-        "tipo": "DEBIT",
-        "nome": "DANIELE SILVA DE OLIVEIRA",
-        "cpf": "09078890690",
-        "bin": "509423",
-        "fornecedor": "Anon",
-        "preco": 50.00,
-        "saldo_minimo": 500.00,
-        "vendido": False,
-    },
-]
-
-# Atribuição dinâmica da bandeira com logo
-for card in DADOS_CARTOES:
-    card["bandeira"] = identificar_bandeira(card["bin"])
 
 telegram_app = Application.builder().token(TOKEN).build()
 
@@ -224,7 +332,7 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
     primeiro_nome = user.first_name if user else "Cliente"
 
     texto = (
-        f"Olá <b>{primeiro_nome}</b> ! , seja bem-vindo ao <b>CasaBlanca Bot!</b> 🏛️✨\n\n"
+        f"Olá <b>{primeiro_nome}</b> ! , seja bem-vindo ao <b>CasaBlanca Bot!</b>\n\n"
         "Selecione uma opção abaixo para navegar pelo nosso catálogo:"
     )
 
@@ -354,17 +462,19 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for c in DADOS_CARTOES:
         if c["vendido"]:
             continue
+        # Busca omni-channel (filtra por BIN, Banco, Categoria, Nível, Bandeira)
         if not query or (
             query in c["bin"].lower() or 
             query in c["banco"].lower() or 
             query in c["categoria"].lower() or 
+            query in c["nivel_formatado"].lower() or
             query in c["bandeira"].lower()
         ):
             cartoes_filtrados.append(c)
 
     for item in cartoes_filtrados:
         texto_resposta = (
-            f"Número do Cartão: {item['cc']}\n"
+            f"Número do Cartão: {item['cc_mascarado']}\n"
             f"Banco: {item['banco']}\n"
             f"Categoria: {item['categoria']}\n"
             f"Bandeira: {item['bandeira']}\n"
@@ -389,8 +499,8 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         results.append(
             InlineQueryResultArticle(
                 id=item["id"],
-                title=f"R$ {item['preco']:.2f} - {item['bin']} - {item['bandeira']}",
-                description=f"Banco: {item['banco']}\nNível: {item['categoria']} | Full: ✅",
+                title=f"R$ {item['preco']:.2f} - BIN {item['bin']} - {item['banco']}",
+                description=f"Nível: {item['nivel_formatado']} | Bandeira: {item['bandeira']}\nFornecedor: {item['fornecedor']}",
                 thumbnail_url=THUMB_CARD_URL,
                 input_message_content=InputTextMessageContent(texto_resposta, parse_mode="HTML"),
                 reply_markup=InlineKeyboardMarkup(keyboard),
@@ -519,10 +629,11 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 card["vendido"] = True
                 await query.message.reply_text(
                     f"🎉 <b>COMPRA CONCLUÍDA!</b>\n\n"
-                    f"<b>Dados do Cartão:</b>\n<code>{card['cc']}</code>\n"
+                    f"<b>Dados do Cartão:</b>\n<code>{card['cc_full']}</code>\n"
                     f"<b>Nome:</b> {card['nome']}\n"
                     f"<b>CPF:</b> {card['cpf']}\n"
                     f"<b>Banco:</b> {card['banco']}\n"
+                    f"<b>Nível:</b> {card['nivel_formatado']}\n"
                     f"<b>Bandeira:</b> {card['bandeira']}\n\n"
                     f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
                     parse_mode="HTML",
