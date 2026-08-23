@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 import requests
@@ -51,7 +52,7 @@ CATALOGO_UNITARIAS = [
     {"id": "unit_2", "nome": "GOLD", "preco": 50.0, "qtd": 174},
     {"id": "unit_3", "nome": "ELO", "preco": 50.0, "qtd": 1},
     {"id": "unit_4", "nome": "BUSINESS", "preco": 80.0, "qtd": 16},
-    {"id": "unit_5", "nome": "INFINITE", "preco": 120.0, "qtd": 413},
+    {"id": "unit_5", "nome": "INFINITE", "preco": 413, "qtd": 413},
     {"id": "unit_6", "nome": "BLACK", "preco": 120.0, "qtd": 114},
     {"id": "unit_7", "nome": "SIGNATURE", "preco": 80.0, "qtd": 3},
     {"id": "unit_8", "nome": "NUBANK GOLD", "preco": 35.0, "qtd": 501},
@@ -91,8 +92,8 @@ DADOS_CARTOES = [
 
 telegram_app = Application.builder().token(TOKEN).build()
 
-# ==================== MISTICPAY API INTEGRACAO ====================
-def gerar_pix_misticpay(valor: float, telegram_id: int):
+# ==================== MISTICPAY API INTEGRACAO (AJUSTADA PELA DOC) ====================
+def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
     url = "https://api.misticpay.com/api/transactions/create"
     headers = {
         "ci": MISTICPAY_CLIENT_ID,
@@ -100,11 +101,16 @@ def gerar_pix_misticpay(valor: float, telegram_id: int):
         "Content-Type": "application/json",
     }
     
-    # Envia o valor limpo sem decimais
+    transaction_id = f"tx_{telegram_id}_{int(time.time())}"
+
+    # Body exato conforme documentacao MisticPay
     payload = {
-        "value": int(valor),
-        "external_id": f"user_{telegram_id}",
-        "projectWebhook": f"{WEBHOOK_BASE_URL}/misticpay-webhook",
+        "amount": valor,
+        "payerName": nome_usuario if nome_usuario else f"Cliente_{telegram_id}",
+        "payerDocument": "12345678909",  # CPF generico obrigatorio conforme doc
+        "transactionId": transaction_id,
+        "description": f"Deposito Saldo Bot User {telegram_id}",
+        "projectWebhook": f"{WEBHOOK_BASE_URL}/misticpay-webhook"
     }
 
     try:
@@ -114,11 +120,10 @@ def gerar_pix_misticpay(valor: float, telegram_id: int):
 
         if response.status_code in [200, 201]:
             res = response.json()
-            qr_code = res.get("qrCode") or res.get("pixCopiaECola") or res.get("copyPaste") or res.get("emv")
-            if not qr_code and "data" in res:
-                qr_code = res["data"].get("qrCode") or res["data"].get("pixCopiaECola") or res["data"].get("copyPaste")
-            if qr_code:
-                return {"pix_code": qr_code}
+            data_obj = res.get("data", {})
+            pix_code = data_obj.get("copyPaste") or data_obj.get("qrCodeBase64")
+            if pix_code:
+                return {"pix_code": pix_code}
         return None
     except Exception as e:
         logger.error(f"Erro de conexao MisticPay: {e}")
@@ -184,28 +189,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    user = update.effective_user
+    user_id = user.id
     try:
         valor = float(context.args[0])
-        if valor < 1.0:
-            await update.message.reply_text("⚠️ O valor mínimo para depósito é R$ 1,00.")
+        if valor < 20.0:
+            await update.message.reply_text("⚠️ <b>O valor mínimo para depósito é R$ 20,00.</b>", parse_mode="HTML")
             return
     except (IndexError, ValueError):
-        await update.message.reply_text("⚠️ Uso correto: <code>/pix 20</code>", parse_mode="HTML")
+        await update.message.reply_text("⚠️ Uso correto: <code>/pix 20</code> (Mínimo: R$ 20,00)", parse_mode="HTML")
         return
 
-    dados_pix = gerar_pix_misticpay(valor, user_id)
+    dados_pix = gerar_pix_misticpay(valor, user_id, user.first_name)
     if dados_pix and dados_pix.get("pix_code"):
         pix_code = dados_pix["pix_code"]
         msg = (
             f"💳 <b>PAGAMENTO VIA PIX GERADO</b>\n\n"
-            f"<b>Valor:</b> R$ {int(valor)},00\n\n"
+            f"<b>Valor:</b> R$ {valor:,.2f}\n\n"
             f"Copie o código abaixo e pague no seu app de banco:\n\n"
             f"<code>{pix_code}</code>"
-        )
+        ).replace(",", "X").replace(".", ",").replace("X", ".")
         await update.message.reply_text(msg, parse_mode="HTML")
     else:
-        await update.message.reply_text("❌ Falha ao gerar PIX MisticPay. Verifique suas credenciais de API.")
+        await update.message.reply_text("❌ Falha ao gerar PIX MisticPay. Verifique a API ou tente novamente.")
 
 # ==================== PESQUISA POR BIN (INLINE) ====================
 async def inline_bin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -271,7 +277,13 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("❌ Você ainda não entrou no canal!")
 
     elif data == "add_saldo":
-        await query.message.reply_text("💳 Digite no chat o valor para depósito:\n\nExemplo: <code>/pix 20</code>", parse_mode="HTML")
+        await query.message.reply_text(
+            "💳 <b>Adicionar Saldo</b>\n\n"
+            "O valor mínimo de depósito é <b>R$ 20,00</b>.\n"
+            "Digite no chat o comando com o valor desejado:\n\n"
+            "Exemplo: <code>/pix 20</code>",
+            parse_mode="HTML"
+        )
 
     elif data == "menu_comprar":
         keyboard = [
@@ -408,14 +420,15 @@ async def telegram_webhook(request: Request):
 async def misticpay_webhook(request: Request):
     try:
         payload = await request.json()
-        logger.info(f"Webhook MisticPay: {payload}")
+        logger.info(f"Webhook MisticPay recebido: {payload}")
 
         status = payload.get("status")
         value = float(payload.get("value", 0))
-        external_id = payload.get("external_id") or payload.get("custom_id") or ""
+        description = payload.get("description", "")
 
-        if status == "COMPLETO" and "user_" in external_id:
-            user_id = int(external_id.replace("user_", ""))
+        # Pega o ID do usuario a partir da descricao
+        if status == "COMPLETO" and "User " in description:
+            user_id = int(description.split("User ")[1])
             SALDO_USUARIOS[user_id] = SALDO_USUARIOS.get(user_id, 0.0) + value
 
             texto_sucesso = (
