@@ -31,7 +31,10 @@ logger = logging.getLogger(__name__)
 # Configurações de Ambiente
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
 ID_CANAL = os.getenv("ID_CANAL", "-1004302224747")
-LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
+
+# Links de Canais
+LINK_CANAL_VERIFICACAO = "https://t.me/oficialharidade"  # Utilizado na tela inicial de bloqueio
+LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")  # Utilizado no menu principal
 LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
 
@@ -207,7 +210,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await enviar_menu_principal(update, context)
     else:
         keyboard = [
-            [InlineKeyboardButton("📢 Entrar no Canal", url=LINK_CANAL)],
+            [InlineKeyboardButton("📢 Entrar no Canal", url=LINK_CANAL_VERIFICACAO)],
             [InlineKeyboardButton("🔄 Já entrei / Liberar Acesso", callback_data="verificar")],
         ]
         await update.message.reply_text(
@@ -255,7 +258,7 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
 
-        # Inicia temporizador de 30 minutos (1800 segundos) para expirar e apagar a foto
+        # Temporizador de 30 minutos para apagar a foto e enviar alerta de expiração
         asyncio.create_task(expirador_pix(
             chat_id=msg_enviada.chat_id,
             message_id=msg_enviada.message_id,
