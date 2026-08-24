@@ -1056,7 +1056,7 @@ async def add_estoque(update, context):
     if update.effective_chat.type != 'private':
         return await update.message.reply_text("❌ Este comando só pode ser usado no privado.")
 
-    ADMIN_IDS = [123456789]  # Altere para o seu ID real do Telegram
+    ADMIN_IDS = [7536040475]  
     if user_id not in ADMIN_IDS:
         return await update.message.reply_text("🚫 Acesso negado.")
 
