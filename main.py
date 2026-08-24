@@ -1110,7 +1110,7 @@ async def add_estoque(update, context):
         return
 
     # 2. Trava de segurança: ID do Administrador
-    ADMIN_IDS = [123456789]  # Coloque seu ID aqui
+    ADMIN_IDS = [7536040475] 
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("🚫 Acesso negado.")
         return
