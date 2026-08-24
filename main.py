@@ -650,8 +650,10 @@ async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
         if no_canal:
             CACHE_CANAL[user_id] = agora
         return no_canal
-    except Exception:
-        return True
+    except Exception as e:
+        print(f"Erro ao verificar canal: {e}")
+        # Retorna False para forçar o usuário a entrar ou para você ver o erro nos logs do Render
+        return False
 
 async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE, reply_to_id: int = None):
     user = update.effective_user
