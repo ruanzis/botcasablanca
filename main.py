@@ -1059,30 +1059,38 @@ async def add_estoque(update, context):
     if user_id not in ADMIN_IDS:
         return await update.message.reply_text("🚫 Acesso negado.")
 
-    # Pega o texto completo enviado na mensagem
     texto_bruto = update.message.text or ""
-    
+
     try:
-       global ESTOQUE_BRUTO
-        
-        # Regex ajustado para capturar exatamente os campos da sua ficha
+        # Regex para capturar os campos da ficha
         cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
         banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
-        nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto) # Captura PLATINUM
+        nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
         tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
         nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
         cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
         preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
         saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
 
-        # Captura o tipo de produto caso haja 'Categoria: CC FULL DADOS' no final da mensagem
         tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", texto_bruto)
         categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
 
         if not cartao_match:
             return await update.message.reply_text("❌ Não foi possível identificar o 'Número do Cartão' na ficha enviada.")
 
-        # Dicionário formatado para o processamento do estoque
+        # Função auxiliar para conversão segura de valores monetários
+        def converte_valor(match, valor_padrao):
+            if not match:
+                return valor_padrao
+            val_str = match.group(1).strip()
+            if "," in val_str:
+                val_str = val_str.replace(".", "").replace(",", ".")
+            return float(val_str)
+
+        preco_val = converte_valor(preco_match, 80.0)
+        saldo_val = converte_valor(saldo_match, 1200.0)
+
+        # Montagem do dicionário (estoque_novos_cartoes já disponível no escopo)
         card_raw = {
             "id": f"card_{len(estoque_novos_cartoes) + 1}",
             "cc": cartao_match.group(1).strip(),
@@ -1092,15 +1100,14 @@ async def add_estoque(update, context):
             "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
             "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
             "cpf": cpf_match.group(1).strip() if cpf_match else "",
-            "preco": float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0,
-            "saldo_minimo": float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0,
+            "preco": preco_val,
+            "saldo_minimo": saldo_val,
             "vendido": False
         }
 
-        # Processa os dados usando seu motor de automação
+        # Processamento via função externa
         item_processado = edificar_item_estoque(card_raw)
 
-        from estoque import estoque_novos_cartoes
         estoque_novos_cartoes.append(item_processado)
 
         await update.message.reply_text(
