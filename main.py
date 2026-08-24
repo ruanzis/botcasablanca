@@ -40,8 +40,8 @@ LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
 
-# Imagem oficial do Cartão de Crédito para o estoque Inline (Garantida sem erro)
-THUMB_CARD_URL = "https://i.imgur.com/8Q73G1c.png"
+# Link Direto extraído da sua imagem no Postimages
+THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
 MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
 MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc1syoymxugk3h")
@@ -180,7 +180,7 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "cpf": re.sub(r"\D", "", str(card_raw.get("cpf", ""))),
         "fornecedor": card_raw.get("fornecedor", "Anon"),
         "preco": float(card_raw.get("preco", 80.0)),
-        "saldo_minimo": float(card_raw.get("saldo_minimo", 1000.0)),
+        "saldo_minimo": float(card_raw.get("saldo_minimo", 1200.0)),
         "vendido": card_raw.get("vendido", False),
     }
 
@@ -262,7 +262,6 @@ def gerar_cpf_valido() -> str:
 async def expirador_pix(chat_id: int, message_id: int, valor: float, segundos: int = 1800):
     await asyncio.sleep(segundos)
     try:
-        # Exclui a mensagem com o QR Code e chave Pix original do chat
         await telegram_app.bot.delete_message(chat_id=chat_id, message_id=message_id)
         valor_formatado = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         await telegram_app.bot.send_message(
@@ -499,12 +498,11 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Número do Cartão: {item['cc_mascarado']}\n"
             f"Banco: {item['banco']}\n"
             f"Categoria: {item['categoria']}\n"
-            f"Bandeira: {item['bandeira']}\n"
             f"Tipo: {item['tipo']}\n"
             f"NOME: {item['nome']}\n"
             f"CPF: {item['cpf']}\n\n"
             f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:,.2f}</b>\n"
-            f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a Política de Reembolso.\n\n"
+            f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a <b>Política de Reembolso</b>.\n\n"
             f"Valor da Compra: R$ {item['preco']:,.2f}\n\n"
             f"Fornecedor: <i>{item['fornecedor']}</i>"
         ).replace(",", "X").replace(".", ",").replace("X", ".")
@@ -530,6 +528,21 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     await update.inline_query.answer(results, cache_time=1)
+
+def montar_texto_cartao_unitario(item: dict) -> str:
+    """Monta a exibição pré-compra idêntica à imagem 3 do cliente."""
+    return (
+        f"Número do Cartão: {item['cc_mascarado']}\n"
+        f"Banco: {item['banco']}\n"
+        f"Categoria: {item['categoria']}\n"
+        f"Tipo: {item['tipo']}\n"
+        f"NOME: {item['nome']}\n"
+        f"CPF: {item['cpf']}\n\n"
+        f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:,.2f}</b>\n"
+        f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a <b>Política de Reembolso</b>.\n\n"
+        f"Valor da Compra: R$ {item['preco']:,.2f}\n\n"
+        f"Fornecedor: <i>{item['fornecedor']}</i>"
+    ).replace(",", "X").replace(".", ",").replace("X", ".")
 
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -603,35 +616,73 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "ver_unitarias":
         keyboard = []
         for item in CATALOGO_UNITARIAS:
-            keyboard.append([InlineKeyboardButton(f"R$ {item['preco']:.0f} {item['nome']} ({item['qtd']})", callback_data=f"buy_u_{item['id']}")])
+            keyboard.append([InlineKeyboardButton(f"R$ {item['preco']:.0f} {item['nome']} ({item['qtd']})", callback_data=f"show_u_{item['id']}")])
 
         keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="voltar_cc_full")])
         await query.message.edit_text(POLITICA_REEMBOLSO, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-    elif data.startswith("buy_u_"):
-        unit_id = data.replace("buy_u_", "")
-        item = next((x for x in CATALOGO_UNITARIAS if x["id"] == unit_id), None)
-        if item:
-            if saldo_atual < item["preco"]:
-                await query.message.reply_text(
-                    f"🔹 <b>CASABLANCA SHOP | SALDO INSUFICIENTE</b> 🔹\n\n"
-                    f"Preço: R$ {item['preco']:,.2f}\n"
-                    f"Seu Saldo: R$ {saldo_atual:,.2f}\n\n"
-                    f"Adicione saldo digitando: <code>/pix {int(item['preco'])}</code>",
-                    parse_mode="HTML",
-                )
-            elif item["qtd"] <= 0:
-                await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Estoque esgotado para este produto!", parse_mode="HTML")
-            else:
-                SALDO_USUARIOS[user_id] -= item["preco"]
-                item["qtd"] -= 1
-                await query.message.reply_text(
-                    f"🔹 <b>CASABLANCA SHOP | COMPRA SUCESSO</b> 🔹\n\n"
-                    f"Item: {item['nome']}\n"
-                    f"Valor: R$ {item['preco']:,.2f}\n"
-                    f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
-                    parse_mode="HTML",
-                )
+    elif data.startswith("show_u_"):
+        unit_id = data.replace("show_u_", "")
+        cartoes_validos = [c for c in DADOS_CARTOES if not c["vendido"]]
+        
+        if not cartoes_validos:
+            await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Estoque temporariamente esgotado para esta categoria!", parse_mode="HTML")
+            return
+
+        idx = 0
+        card = cartoes_validos[idx]
+        texto_card = montar_texto_cartao_unitario(card)
+
+        keyboard = [
+            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{card['id']}")],
+            [
+                InlineKeyboardButton("⬅️ Anterior", callback_data=f"u_nav_{unit_id}_{idx - 1}"),
+                InlineKeyboardButton("Próximo ➡️", callback_data=f"u_nav_{unit_id}_{idx + 1}"),
+            ],
+            [InlineKeyboardButton("❌ Cancelar", callback_data="ver_unitarias")],
+        ]
+
+        await query.message.edit_text(texto_card, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("u_nav_"):
+        partes = data.split("_")
+        unit_id = partes[2]
+        idx = int(partes[3])
+
+        cartoes_validos = [c for c in DADOS_CARTOES if not c["vendido"]]
+        if not cartoes_validos:
+            await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Estoque esgotado!", parse_mode="HTML")
+            return
+
+        idx = idx % len(cartoes_validos)
+        card = cartoes_validos[idx]
+        texto_card = montar_texto_cartao_unitario(card)
+
+        keyboard = [
+            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{card['id']}")],
+            [
+                InlineKeyboardButton("⬅️ Anterior", callback_data=f"u_nav_{unit_id}_{idx - 1}"),
+                InlineKeyboardButton("Próximo ➡️", callback_data=f"u_nav_{unit_id}_{idx + 1}"),
+            ],
+            [InlineKeyboardButton("❌ Cancelar", callback_data="ver_unitarias")],
+        ]
+
+        await query.message.edit_text(texto_card, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data == "nav_prev" or data == "nav_next":
+        cartoes_validos = [c for c in DADOS_CARTOES if not c["vendido"]]
+        if cartoes_validos:
+            card = random.choice(cartoes_validos)
+            texto_card = montar_texto_cartao_unitario(card)
+            keyboard = [
+                [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{card['id']}")],
+                [
+                    InlineKeyboardButton("⬅️ Anterior", callback_data="nav_prev"),
+                    InlineKeyboardButton("Próximo ➡️", callback_data="nav_next"),
+                ],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="voltar_cc_full")],
+            ]
+            await query.message.edit_text(texto_card, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
     elif data.startswith("buy_card_"):
         card_id = data.replace("buy_card_", "")
