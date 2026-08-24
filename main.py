@@ -1092,9 +1092,9 @@ async def add_estoque(update, context):
         preco_val = converte_valor(preco_match, 80.0)
         saldo_val = converte_valor(saldo_match, 1200.0)
 
-        # Montagem do dicionário (estoque_novos_cartoes já disponível no escopo)
+        # Montagem do dicionário (DADOS_CARTOES já disponível no escopo)
         card_raw = {
-            "id": f"card_{len(estoque_novos_cartoes) + 1}",
+            "id": f"card_{len(DADOS_CARTOES) + 1}",
             "cc": cartao_match.group(1).strip(),
             "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
             "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
