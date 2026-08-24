@@ -1,15 +1,15 @@
 import asyncio
-from contextlib import asynccontextmanager
 import io
 import logging
 import os
 import random
 import re
 import time
-
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-import httpx
 import qrcode
+import httpx
+import uvicorn
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -26,7 +26,6 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-import uvicorn
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO)
@@ -57,7 +56,335 @@ POLITICA_REEMBOLSO = (
 
 SALDO_USUARIOS = {}
 CACHE_CANAL = {}
+# estoque.py
 
+estoque_novos_cartoes = [
+    {
+        "cartao": "470598******8057",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "ROSIANE MARINHO DE CARVALHO",
+        "cpf": "49685007420",
+        "score_serasa": 129,
+        "score_bc": 542,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "62 de 520"
+    },
+    {
+        "cartao": "489391******2990",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "MAURICIO BARBOSA CHAGAS",
+        "cpf": "22638482315",
+        "score_serasa": 858,
+        "score_bc": 438,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "63 de 520"
+    },
+    {
+        "cartao": "498401******5730",
+        "banco": "BANCO DO BRASIL, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "AUTONOMESTA BENICIO COELHO",
+        "cpf": "07795041353",
+        "score_serasa": 59,
+        "score_bc": 25,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "64 de 520"
+    },
+    {
+        "cartao": "400497******3960",
+        "banco": "BANCO LAFISE BANCENTRO",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "LUCIANO NEUMANN",
+        "cpf": "64175782087",
+        "score_serasa": None,
+        "score_bc": 200,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "65 de 520"
+    },
+    {
+        "cartao": "470598******4516",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "VIVIANE BACHMANN",
+        "cpf": "96957050904",
+        "score_serasa": None,
+        "score_bc": 862,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "66 de 520"
+    },
+    {
+        "cartao": "523431******4504",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "SILVANA APARECIDA ULBRICH",
+        "cpf": "04318683958",
+        "score_serasa": None,
+        "score_bc": 523,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "67 de 520"
+    },
+    {
+        "cartao": "470598******5916",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "LETICIA SILVA MACEDO DE SA",
+        "cpf": "76930440353",
+        "score_serasa": 141,
+        "score_bc": 96,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "68 de 520"
+    },
+    {
+        "cartao": "554906******4373",
+        "banco": "BANCO DO BRASIL, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "JOSE PEDRO PEREIRA JUNIOR",
+        "cpf": "61618837320",
+        "score_serasa": 424,
+        "score_bc": 362,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "69 de 520"
+    },
+    {
+        "cartao": "415275******4133",
+        "banco": "PORTOSEG S.A. CREDITO FINANCIAMENTO E INVESTIM...",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "HUDISON LOCH HASKEL",
+        "cpf": "05949292960",
+        "score_serasa": None,
+        "score_bc": 940,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "70 de 520"
+    },
+    {
+        "cartao": "531681******6381",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "SEBASTIAO DE SOUZA NASCIMENTO FILHO",
+        "cpf": "13153200106",
+        "score_serasa": 799,
+        "score_bc": 771,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "71 de 520"
+    },
+    {
+        "cartao": "470598******3922",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "ROZANA GOMES DO NASCIMENTO DA SILVA",
+        "cpf": "59473789149",
+        "score_serasa": 596,
+        "score_bc": 317,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "72 de 520"
+    },
+    {
+        "cartao": "422007******6782",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "CARLOS SANTANA MATHEUS",
+        "cpf": "69926824749",
+        "score_serasa": 80,
+        "score_bc": 814,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "73 de 520"
+    },
+    {
+        "cartao": "470598******7330",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "ANTONIO GOMES DA SILVA",
+        "cpf": "20902735187",
+        "score_serasa": 136,
+        "score_bc": 160,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "74 de 520"
+    },
+    {
+        "cartao": "415275******4212",
+        "banco": "PORTOSEG S.A. CREDITO FINANCIAMENTO E INVESTIM...",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "THATIANE LIMA DA SILVA BACK",
+        "cpf": "95907750200",
+        "score_serasa": 219,
+        "score_bc": 433,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "75 de 520"
+    },
+    {
+        "cartao": "514945******4408",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "STEFANNI MOURA DO NASCIMENTO",
+        "cpf": "06912570194",
+        "score_serasa": 1,
+        "score_bc": 0,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "76 de 520"
+    },
+    {
+        "cartao": "498401******0300",
+        "banco": "BANCO DO BRASIL, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "ADRIANA TOMASINI",
+        "cpf": "86252577120",
+        "score_serasa": 572,
+        "score_bc": 513,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "77 de 520"
+    },
+    {
+        "cartao": "523431******2024",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "MARIA MADALENA MANGANARO",
+        "cpf": "08306984854",
+        "score_serasa": 563,
+        "score_bc": 888,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "78 de 520"
+    },
+    {
+        "cartao": "464128******5204",
+        "banco": "BANCO BRADESCO CARTOES, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "CARLOSNAICK GONCALVES DE SOUZA",
+        "cpf": "31280862734",
+        "score_serasa": 306,
+        "score_bc": 508,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "79 de 520"
+    },
+    {
+        "cartao": "422007******3346",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "FARAH MARIA ALVIM DE SOUZA HOLANDA",
+        "cpf": "04070803416",
+        "score_serasa": 514,
+        "score_bc": 869,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "80 de 520"
+    },
+    {
+        "cartao": "414506******7584",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "FABIANA MORGAN LOPES CORDEIRO",
+        "cpf": "28818701800",
+        "score_serasa": 448,
+        "score_bc": 150,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "81 de 520"
+    },
+    {
+        "cartao": "523431******5434",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "EDUARDO MOURA ABREU BARROSO DE SIQUEIRA",
+        "cpf": "16592576898",
+        "score_serasa": 28,
+        "score_bc": 42,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "82 de 520"
+    },
+    {
+        "cartao": "422007******9711",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "FABRICIO ALMEIDA",
+        "cpf": "98693107887",
+        "score_serasa": 26,
+        "score_bc": 31,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "83 de 520"
+    },
+    {
+        "cartao": "415275******9216",
+        "banco": "PORTOSEG S.A. CREDITO FINANCIAMENTO E INVESTIM...",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "INGRID ARAMBURU TIAGO DE ALMEIDA",
+        "cpf": "05798472175",
+        "score_serasa": 234,
+        "score_bc": 306,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "84 de 520"
+    },
+    {
+        "cartao": "403002******4019",
+        "banco": "BV FINANCEIRA S.A. CREDITO FINANCIAMENTO E INV...",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "NATAN MATEUS GRZEBIELUCKAS",
+        "cpf": "04564175084",
+        "score_serasa": 1,
+        "score_bc": 653,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "85 de 520"
+    },
+    {
+        "cartao": "470598******5086",
+        "banco": "ITAU UNIBANCO, S.A.",
+        "categoria": "PLATINUM",
+        "tipo": "Crédito",
+        "nome": "JOBSON SANCHEZ GARCIA",
+        "cpf": "11662941889",
+        "score_serasa": 324,
+        "score_bc": 183,
+        "preco": "80,00",
+        "limite_garantido": 1200.00,
+        "posicao": "86 de 520"
+    }
+]
 # --- MOTOR DE AUTOMAÇÃO E EDIFICAÇÃO DE ESTOQUE ---
 
 def identificar_bin(cc_number: str) -> str:
@@ -185,7 +512,6 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "vendido": card_raw.get("vendido", False),
     }
 
-# --- ESTOQUE DE CARTÕES ---
 ESTOQUE_BRUTO = [
     {
         "id": "card_1",
@@ -235,7 +561,6 @@ ESTOQUE_BRUTO = [
         "saldo_minimo": 1200.00,
         "vendido": False,
     },
-    # Adicione novos itens abaixo mantendo o mesmo formato
 ]
 
 DADOS_CARTOES = [edificar_item_estoque(item) for item in ESTOQUE_BRUTO]
