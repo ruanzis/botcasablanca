@@ -40,14 +40,15 @@ LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
 
-THUMB_CARD_URL = "https://i.imgur.com/v8S4P1M.png"
+# Imagem oficial do Cartão de Crédito para o estoque Inline (Garantida sem erro)
+THUMB_CARD_URL = "https://i.imgur.com/8Q73G1c.png"
 
 MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
 MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc1syoymxugk3h")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
 POLITICA_REEMBOLSO = (
-    "<b>Política de Reembolso</b>\n\n"
+    "🔹 <b>SISTEMA CASABLANCA | POLÍTICA DE REEMBOLSO</b> 🔹\n\n"
     "⚠️ Caso o saldo esteja abaixo do mínimo garantido na pré-compra, "
     "solicite reembolso em até 20 minutos via @haridadenetwork, "
     "com vídeo mostrando cartão, valor e erro."
@@ -183,7 +184,6 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "vendido": card_raw.get("vendido", False),
     }
 
-# CATALOGO DE CARTÕES NO ESTOQUE BRUTO
 ESTOQUE_BRUTO = [
     {
         "id": "card_1",
@@ -235,7 +235,6 @@ ESTOQUE_BRUTO = [
     },
 ]
 
-# Processamento automatizado para edificação instantânea de todo o estoque
 DADOS_CARTOES = [edificar_item_estoque(item) for item in ESTOQUE_BRUTO]
 
 CATALOGO_UNITARIAS = [
@@ -263,11 +262,12 @@ def gerar_cpf_valido() -> str:
 async def expirador_pix(chat_id: int, message_id: int, valor: float, segundos: int = 1800):
     await asyncio.sleep(segundos)
     try:
+        # Exclui a mensagem com o QR Code e chave Pix original do chat
         await telegram_app.bot.delete_message(chat_id=chat_id, message_id=message_id)
         valor_formatado = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         await telegram_app.bot.send_message(
             chat_id=chat_id,
-            text=f"⏳ <b>QRCODE expirado por tempo limitado.</b>\nPara recarregar novamente, digite <code>/pix {valor_formatado}</code>.",
+            text=f"⏳ <b>QRCODE EXPIRADO POR TEMPO LIMITADO.</b>\nPara gerar novamente, digite <code>/pix {valor_formatado}</code>.",
             parse_mode="HTML"
         )
     except Exception as e:
@@ -332,7 +332,8 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
     primeiro_nome = user.first_name if user else "Cliente"
 
     texto = (
-        f"Olá <b>{primeiro_nome}</b> ! , seja bem-vindo ao <b>CasaBlanca Bot!</b>\n\n"
+        f"🔹 <b>CASABLANCA SHOP | SISTEMA CENTRAL</b> 🔹\n\n"
+        f"Olá <b>{primeiro_nome}</b>! Seja bem-vindo ao <b>CasaBlanca Bot</b>!\n\n"
         "Selecione uma opção abaixo para navegar pelo nosso catálogo:"
     )
 
@@ -355,14 +356,23 @@ async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             with open(CAPA_PATH, "rb") as photo:
                 await context.bot.send_photo(
-                    chat_id=chat_id, photo=photo, caption=texto, reply_markup=reply_markup, parse_mode="HTML", reply_to_message_id=reply_to_id
+                    chat_id=chat_id,
+                    photo=photo,
+                    caption=texto,
+                    reply_markup=reply_markup,
+                    parse_mode="HTML",
+                    reply_to_message_id=reply_to_id
                 )
                 return
         except Exception:
             pass
 
     await context.bot.send_message(
-        chat_id=chat_id, text=texto, reply_markup=reply_markup, parse_mode="HTML", reply_to_message_id=reply_to_id
+        chat_id=chat_id,
+        text=texto,
+        reply_markup=reply_markup,
+        parse_mode="HTML",
+        reply_to_message_id=reply_to_id
     )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -377,6 +387,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔄 Já entrei / Liberar Acesso", callback_data="verificar")],
         ]
         await update.message.reply_text(
+            "🔹 <b>CASABLANCA SHOP | VERIFICAÇÃO</b> 🔹\n\n"
             "⚠️ <b>ACESSO BLOQUEADO!</b>\n\nPara acessar nosso bot, entre no canal oficial.",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="HTML",
@@ -391,10 +402,18 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         valor = float(context.args[0])
         if valor < 20.0:
-            await update.message.reply_text("⚠️ <b>O valor mínimo para depósito é R$ 20,00.</b>", parse_mode="HTML", reply_to_message_id=msg_id)
+            await update.message.reply_text(
+                "🔹 <b>CASABLANCA SHOP | SISTEMA PIX</b> 🔹\n\n⚠️ <b>O valor mínimo para depósito é R$ 20,00.</b>",
+                parse_mode="HTML",
+                reply_to_message_id=msg_id
+            )
             return
     except (IndexError, ValueError):
-        await update.message.reply_text("⚠️ Uso correto: <code>/pix 20</code> (Mínimo: R$ 20,00)", parse_mode="HTML", reply_to_message_id=msg_id)
+        await update.message.reply_text(
+            "🔹 <b>CASABLANCA SHOP | SISTEMA PIX</b> 🔹\n\n⚠️ Uso correto: <code>/pix 20</code> (Mínimo: R$ 20,00)",
+            parse_mode="HTML",
+            reply_to_message_id=msg_id
+        )
         return
 
     dados_pix = await gerar_pix_misticpay(valor, user_id, user.first_name)
@@ -410,7 +429,7 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
         valor_formatado = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
         msg = (
-            f"💳 <b>PAGAMENTO VIA PIX GERADO - CasablancaShop</b>\n\n"
+            f"🔹 <b>CASABLANCA SHOP | PAGAMENTO VIA PIX</b> 🔹\n\n"
             f"💰 <b>Valor:</b> R$ {valor_formatado}\n"
             f"⏳ <b>Validade:</b> 30 minutos\n\n"
             f"Escaneie o QR Code acima ou copie o código abaixo:\n\n"
@@ -432,7 +451,11 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ))
 
     elif dados_pix and "erro" in dados_pix:
-        await update.message.reply_text(f"❌ <b>Retorno MisticPay:</b>\n<code>{dados_pix['erro']}</code>", parse_mode="HTML", reply_to_message_id=msg_id)
+        await update.message.reply_text(
+            f"🔹 <b>CASABLANCA SHOP | ERRO PIX</b> 🔹\n\n❌ <b>Retorno MisticPay:</b>\n<code>{dados_pix['erro']}</code>",
+            parse_mode="HTML",
+            reply_to_message_id=msg_id
+        )
 
 async def IA_atendimento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.lower()
@@ -440,15 +463,15 @@ async def IA_atendimento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if any(p in texto for p in ["saldo", "deposito", "pix", "comprar"]):
         resposta = (
-            "🤖 <b>Assistente Casablanca:</b>\n\n"
+            "🔹 <b>CASABLANCA SHOP | ATENDIMENTO IA</b> 🔹\n\n"
             "Para adicionar saldo instantaneamente, digite <code>/pix valor</code> no chat.\n"
             "Exemplo: <code>/pix 20</code>"
         )
     elif any(p in texto for p in ["suporte", "ajuda", "dono", "admin"]):
-        resposta = f"🤖 <b>Atendimento Humano:</b>\n\nFale diretamente com nosso suporte: {LINK_SUPORTE}"
+        resposta = f"🔹 <b>CASABLANCA SHOP | SUPORTE</b> 🔹\n\nFale diretamente com nosso suporte: {LINK_SUPORTE}"
     else:
         resposta = (
-            "🤖 <b>Assistente Casablanca:</b>\n\n"
+            "🔹 <b>CASABLANCA SHOP | ASSISTENTE</b> 🔹\n\n"
             "Para navegar pelo catálogo completo e acessar as funções do bot, envie o comando /start."
         )
 
@@ -462,7 +485,6 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for c in DADOS_CARTOES:
         if c["vendido"]:
             continue
-        # Busca omni-channel (filtra por BIN, Banco, Categoria, Nível, Bandeira)
         if not query or (
             query in c["bin"].lower() or 
             query in c["banco"].lower() or 
@@ -528,11 +550,11 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.delete()
             await enviar_menu_principal(update, context)
         else:
-            await query.message.reply_text("❌ Você ainda não entrou no canal!")
+            await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Você ainda não entrou no canal!", parse_mode="HTML")
 
     elif data == "add_saldo":
         await query.message.reply_text(
-            "💳 <b>Adicionar Saldo</b>\n\n"
+            "🔹 <b>CASABLANCA SHOP | ADICIONAR SALDO</b> 🔹\n\n"
             "O valor mínimo de depósito é <b>R$ 20,00</b>.\n"
             "Digite no chat o comando com o valor desejado:\n\n"
             "Exemplo: <code>/pix 20</code>",
@@ -548,11 +570,12 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Voltar ao Menu", callback_data="voltar_inicio")],
         ]
         markup = InlineKeyboardMarkup(keyboard)
+        texto = "🔹 <b>CASABLANCA SHOP | CATÁLOGO</b> 🔹\n\nEscolha a categoria desejada:"
         if query.message.photo:
             await query.message.delete()
-            await context.bot.send_message(chat_id=chat_id, text="🛒 <b>SELEÇÃO DE CATEGORIAS</b>\n\nEscolha a categoria:", reply_markup=markup, parse_mode="HTML")
+            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=markup, parse_mode="HTML")
         else:
-            await query.message.edit_text("🛒 <b>SELEÇÃO DE CATEGORIAS</b>\n\nEscolha a categoria:", reply_markup=markup, parse_mode="HTML")
+            await query.message.edit_text(texto, reply_markup=markup, parse_mode="HTML")
 
     elif data == "voltar_cc_full":
         keyboard = [
@@ -568,14 +591,14 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("💬 Atendimento/suporte", url=LINK_SUPORTE)],
             [InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")],
         ]
-        texto = f"Informações\n- Saldo: R$ {saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        texto = f"🔹 <b>CASABLANCA SHOP | CC FULL DADOS</b> 🔹\n\nInformações:\n- Saldo: R$ {saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         markup = InlineKeyboardMarkup(keyboard)
 
         if query.message.photo:
             await query.message.delete()
-            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=markup)
+            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=markup, parse_mode="HTML")
         else:
-            await query.message.edit_text(texto, reply_markup=markup)
+            await query.message.edit_text(texto, reply_markup=markup, parse_mode="HTML")
 
     elif data == "ver_unitarias":
         keyboard = []
@@ -591,19 +614,19 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if item:
             if saldo_atual < item["preco"]:
                 await query.message.reply_text(
-                    f"❌ <b>SALDO INSUFICIENTE!</b>\n\n"
+                    f"🔹 <b>CASABLANCA SHOP | SALDO INSUFICIENTE</b> 🔹\n\n"
                     f"Preço: R$ {item['preco']:,.2f}\n"
                     f"Seu Saldo: R$ {saldo_atual:,.2f}\n\n"
                     f"Adicione saldo digitando: <code>/pix {int(item['preco'])}</code>",
                     parse_mode="HTML",
                 )
             elif item["qtd"] <= 0:
-                await query.message.reply_text("❌ Estoque esgotado para este produto!")
+                await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Estoque esgotado para este produto!", parse_mode="HTML")
             else:
                 SALDO_USUARIOS[user_id] -= item["preco"]
                 item["qtd"] -= 1
                 await query.message.reply_text(
-                    f"✅ <b>COMPRA REALIZADA COM SUCESSO!</b>\n\n"
+                    f"🔹 <b>CASABLANCA SHOP | COMPRA SUCESSO</b> 🔹\n\n"
                     f"Item: {item['nome']}\n"
                     f"Valor: R$ {item['preco']:,.2f}\n"
                     f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
@@ -615,10 +638,10 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         card = next((c for c in DADOS_CARTOES if c["id"] == card_id), None)
         if card:
             if card["vendido"]:
-                await query.message.reply_text("❌ Este cartão já foi vendido!")
+                await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Este cartão já foi vendido!", parse_mode="HTML")
             elif saldo_atual < card["preco"]:
                 await query.message.reply_text(
-                    f"❌ <b>SALDO INSUFICIENTE!</b>\n\n"
+                    f"🔹 <b>CASABLANCA SHOP | SALDO INSUFICIENTE</b> 🔹\n\n"
                     f"Preço do cartão: R$ {card['preco']:,.2f}\n"
                     f"Seu Saldo: R$ {saldo_atual:,.2f}\n\n"
                     f"Adicione saldo digitando: <code>/pix {int(card['preco'])}</code>",
@@ -628,7 +651,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 SALDO_USUARIOS[user_id] -= card["preco"]
                 card["vendido"] = True
                 await query.message.reply_text(
-                    f"🎉 <b>COMPRA CONCLUÍDA!</b>\n\n"
+                    f"🎉 <b>COMPRA CONCLUÍDA - CASABLANCA SHOP</b>\n\n"
                     f"<b>Dados do Cartão:</b>\n<code>{card['cc_full']}</code>\n"
                     f"<b>Nome:</b> {card['nome']}\n"
                     f"<b>CPF:</b> {card['cpf']}\n"
@@ -685,7 +708,7 @@ async def misticpay_webhook(request: Request):
             SALDO_USUARIOS[user_id] = SALDO_USUARIOS.get(user_id, 0.0) + value
 
             texto_sucesso = (
-                f"✅ <b>PAGAMENTO CONFIRMADO!</b>\n\n"
+                f"🔹 <b>CASABLANCA SHOP | PAGAMENTO CONFIRMADO</b> 🔹\n\n"
                 f"Foi creditado <b>R$ {value:,.2f}</b> na sua conta."
             ).replace(",", "X").replace(".", ",").replace("X", ".")
 
