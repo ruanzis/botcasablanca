@@ -1061,7 +1061,9 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
-    try:
+   try:
+        global DADOS_CARTOES
+       
         # Regex para capturar os campos da ficha
         cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
         banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
@@ -1108,7 +1110,7 @@ async def add_estoque(update, context):
         # Processamento via função externa
         item_processado = edificar_item_estoque(card_raw)
 
-        estoque_novos_cartoes.append(item_processado)
+        DADOS_CARTOES.append(item_processado)
 
         await update.message.reply_text(
             f"✅ **Item Processado e Adicionado!**\n\n"
