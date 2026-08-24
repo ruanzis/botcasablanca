@@ -511,64 +511,6 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "saldo_minimo": float(card_raw.get("saldo_minimo", 1200.0)),
         "vendido": card_raw.get("vendido", False),
     }
-async def add_estoque(update, context):
-    user_id = update.effective_user.id
-    if update.effective_chat.type != 'private':
-        return await update.message.reply_text("❌ Este comando só pode ser usado no privado.")
-
-    ADMIN_IDS = [123456789]  # Substitua pelo seu ID numérico do Telegram
-    if user_id not in ADMIN_IDS:
-        return await update.message.reply_text("🚫 Acesso negado.")
-
-    texto_bruto = update.message.text
-
-    try:
-        # Extrai os dados da mensagem enviada no chat
-        cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
-        banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
-        categoria_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
-        tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
-        nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
-        cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
-        preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
-        saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
-
-        cc_extraida = cartao_match.group(1).strip() if cartao_match else ""
-
-        # Monta a estrutura para o seu motor edificar
-        card_raw = {
-            "id": f"card_{len(estoque_novos_cartoes) + 1}",
-            "cc": cc_extraida,
-            "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
-            "categoria": categoria_match.group(1).strip() if categoria_match else "STANDARD",
-            "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
-            "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
-            "cpf": cpf_match.group(1).strip() if cpf_match else "",
-            "preco": float(preco_match.group(1).replace(",", ".")) if preco_match else 80.0,
-            "saldo_minimo": float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0,
-            "vendido": False
-        }
-
-        # Processa os dados usando o motor
-        item_processado = edificar_item_estoque(card_raw)
-
-        from estoque import estoque_novos_cartoes
-        estoque_novos_cartoes.append(item_processado)
-
-        # Envia a confirmação formatada
-        await update.message.reply_text(
-            f"✅ **Item Processado e Adicionado!**\n\n"
-            f"• **BIN:** `{item_processado['bin']}`\n"
-            f"• **Banco:** {item_processado['banco']}\n"
-            f"• **Bandeira:** {item_processado['bandeira']}\n"
-            f"• **Nível:** {item_processado['nivel_formatado']}\n"
-            f"• **Preço:** R$ {item_processado['preco']:.2f}\n"
-            f"• **Cartão Mascarado:** `{item_processado['cc_mascarado']}`",
-            parse_mode="Markdown"
-        )
-
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
 ESTOQUE_BRUTO = [
     {
         "id": "card_1",
@@ -1113,38 +1055,65 @@ async def add_estoque(update, context):
     if update.effective_chat.type != 'private':
         return await update.message.reply_text("❌ Este comando só pode ser usado no privado.")
 
-    ADMIN_IDS = [7536040475]  
+    ADMIN_IDS = [123456789]  # Substitua pelo seu ID numérico do Telegram
     if user_id not in ADMIN_IDS:
         return await update.message.reply_text("🚫 Acesso negado.")
 
-    try:
-        args = context.args
-        bin_cartao, banco, categoria, preco = args[0], args[1], args[2], args[3]
+    # Pega o texto completo enviado na mensagem
+    texto_bruto = update.message.text or ""
 
-        novo_item = {
-            "cartao": f"{bin_cartao}******0000",
-            "banco": banco.upper(),
-            "categoria": categoria.upper(),
-            "preco": preco,
-            "tipo": "Crédito"
+    try:
+        # Regex ajustado para capturar exatamente os campos da sua ficha
+        cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
+        banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
+        nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto) # Captura PLATINUM
+        tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
+        nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
+        cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
+        preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
+        saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
+
+        # Captura o tipo de produto caso haja 'Categoria: CC FULL DADOS' no final da mensagem
+        tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", texto_bruto)
+        categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
+
+        if not cartao_match:
+            return await update.message.reply_text("❌ Não foi possível identificar o 'Número do Cartão' na ficha enviada.")
+
+        # Dicionário formatado para o processamento do estoque
+        card_raw = {
+            "id": f"card_{len(estoque_novos_cartoes) + 1}",
+            "cc": cartao_match.group(1).strip(),
+            "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
+            "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
+            "categoria_produto": categoria_final,
+            "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
+            "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
+            "cpf": cpf_match.group(1).strip() if cpf_match else "",
+            "preco": float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0,
+            "saldo_minimo": float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0,
+            "vendido": False
         }
 
+        # Processa os dados usando seu motor de automação
+        item_processado = edificar_item_estoque(card_raw)
+
         from estoque import estoque_novos_cartoes
-        estoque_novos_cartoes.append(novo_item)
+        estoque_novos_cartoes.append(item_processado)
 
         await update.message.reply_text(
-            f"✅ **Item cadastrado com sucesso!**\n"
-            f"• BIN: `{bin_cartao}`\n"
-            f"• Banco: {banco.upper()}\n"
-            f"• Categoria: {categoria.upper()}\n"
-            f"• Preço: R$ {preco}",
+            f"✅ **Item Processado e Adicionado!**\n\n"
+            f"• **BIN:** `{item_processado['bin']}`\n"
+            f"• **Banco:** {item_processado['banco']}\n"
+            f"• **Bandeira:** {item_processado['bandeira']}\n"
+            f"• **Nível:** {item_processado['nivel_formatado']}\n"
+            f"• **Preço:** R$ {item_processado['preco']:.2f}\n"
+            f"• **Cartão Mascarado:** `{item_processado['cc_mascarado']}`",
             parse_mode="Markdown"
         )
-    except Exception:
-        await update.message.reply_text(
-            "⚠️ Use o formato: `/add_estoque <BIN> <BANCO> <CATEGORIA> <PRECO>`",
-            parse_mode="Markdown"
-        )
+
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
 
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
@@ -1195,6 +1164,14 @@ async def misticpay_webhook(request: Request):
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# --- REGISTRO DE COMANDOS DO TELEGRAM ---
+telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("pix", comando_pix))
+telegram_app.add_handler(InlineQueryHandler(inline_search))
+telegram_app.add_handler(CallbackQueryHandler(botao_callback))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
 
 @app.get("/")
 async def root():
