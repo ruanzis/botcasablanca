@@ -4,11 +4,13 @@ import logging
 import os
 import random
 import re
+import sqlite3
 import time
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
-import qrcode
 import httpx
+import qrcode
 import uvicorn
 from telegram import (
     InlineKeyboardButton,
@@ -39,8 +41,6 @@ LINK_CANAL_VERIFICACAO = "https://t.me/oficialharidade"
 LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
-
-# Link Direto extraído da sua imagem no Postimages
 THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
 MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
@@ -54,18 +54,60 @@ POLITICA_REEMBOLSO = (
     "com vídeo mostrando cartão, valor e erro."
 )
 
-SALDO_USUARIOS = {}
 CACHE_CANAL = {}
+http_client: httpx.AsyncClient = None
 
-# --- MOTOR DE AUTOMAÇÃO E EDIFICAÇÃO DE ESTOQUE ---
+# --- BANCO DE DADOS SQLITE (Persistência) ---
+def init_db():
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            user_id INTEGER PRIMARY KEY,
+            saldo REAL DEFAULT 0.0
+        )
+    """)
+    conn.commit()
+    conn.close()
 
+def get_saldo(user_id: int) -> float:
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT saldo FROM usuarios WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else 0.0
+
+def add_saldo(user_id: int, valor: float):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO usuarios (user_id, saldo) VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET saldo = saldo + ?
+    """, (user_id, valor, valor))
+    conn.commit()
+    conn.close()
+
+def descontar_saldo(user_id: int, valor: float) -> bool:
+    saldo_atual = get_saldo(user_id)
+    if saldo_atual >= valor:
+        conn = sqlite3.connect("database.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE usuarios SET saldo = saldo - ? WHERE user_id = ?", (valor, user_id))
+        conn.commit()
+        conn.close()
+        return True
+    return False
+
+# Inicializa o banco de dados
+init_db()
+
+# --- MOTOR DE AUTOMAÇÃO E ESTOQUE ---
 def identificar_bin(cc_number: str) -> str:
-    """Extrai exatamente os 6 primeiros dígitos numéricos do cartão."""
     apenas_numeros = re.sub(r"\D", "", str(cc_number))
     return apenas_numeros[:6] if len(apenas_numeros) >= 6 else "000000"
 
 def mascarar_cartao(cc_full: str) -> str:
-    """Mascara o cartão preservando os 6 primeiros e os 4 últimos dígitos."""
     partes = cc_full.split("|")
     num_limpo = re.sub(r"\D", "", partes[0])
     if len(num_limpo) >= 13:
@@ -80,7 +122,6 @@ def mascarar_cartao(cc_full: str) -> str:
     return num_mascarado
 
 def identificar_bandeira(bin_code: str) -> str:
-    """Identificação automatizada de bandeira por faixa de BIN."""
     b = str(bin_code).strip()
     if not b or len(b) < 6:
         return "DESCONHECIDA"
@@ -105,7 +146,6 @@ def identificar_bandeira(bin_code: str) -> str:
         return "OUTRAS"
 
 def identificar_banco_por_bin(bin_code: str) -> str:
-    """Reconhecimento automatizado do Banco Emissor através do BIN."""
     b = str(bin_code).strip()
     if b.startswith(("470598", "544169", "498406", "525204", "410863", "412171")):
         return "ITAU UNIBANCO, S.A."
@@ -129,9 +169,7 @@ def identificar_banco_por_bin(bin_code: str) -> str:
         return "BANCO DESCONHECIDO"
 
 def identificar_nivel(categoria_raw: str) -> str:
-    """Padronização limpa de Categoria/Nível."""
     cat = str(categoria_raw).upper().strip()
-    
     if "BLACK" in cat:
         return "BLACK"
     elif "INFINITE" in cat:
@@ -152,7 +190,6 @@ def identificar_nivel(categoria_raw: str) -> str:
         return cat if cat else "STANDARD"
 
 def edificar_item_estoque(card_raw: dict) -> dict:
-    """Reconhece, calcula e edifica todos os campos do cartão no estoque."""
     cc_bruto = card_raw.get("cc", "")
     bin_extraida = identificar_bin(cc_bruto)
     
@@ -185,54 +222,10 @@ def edificar_item_estoque(card_raw: dict) -> dict:
     }
 
 ESTOQUE_BRUTO = [
-    {
-        "id": "card_1",
-        "cc": "542819******0150|08|2028|306",
-        "categoria": "FULL PLATINUM",
-        "tipo": "CREDIT",
-        "nome": "CRISTIANO CACHEIRO MAHIA",
-        "cpf": "03250698679",
-        "fornecedor": "Anon",
-        "preco": 80.00,
-        "saldo_minimo": 1200.00,
-        "vendido": False,
-    },
-    {
-        "id": "card_2",
-        "cc": "544169******0487|05|2029|931",
-        "categoria": "PLATINUM",
-        "tipo": "CREDIT",
-        "nome": "ALEXANDRE CARVALHO CHANAN",
-        "cpf": "18319050006",
-        "fornecedor": "Anon",
-        "preco": 80.00,
-        "saldo_minimo": 1200.00,
-        "vendido": False,
-    },
-    {
-        "id": "card_3",
-        "cc": "509423******7847",
-        "categoria": "PREPAID MULTIPLE VOUCHER",
-        "tipo": "DEBIT",
-        "nome": "DANIELE SILVA DE OLIVEIRA",
-        "cpf": "09078890690",
-        "fornecedor": "Anon",
-        "preco": 50.00,
-        "saldo_minimo": 500.00,
-        "vendido": False,
-    },
-    {
-        "id": "card_4",
-        "cc": "470598******5141",
-        "categoria": "PLATINUM",
-        "tipo": "CREDIT",
-        "nome": "ALESSANDRO FERNANDES GOMES PEREIRA",
-        "cpf": "11257194780",
-        "fornecedor": "Anon",
-        "preco": 80.00,
-        "saldo_minimo": 1200.00,
-        "vendido": False,
-    },
+    {"id": "card_1", "cc": "542819******0150|08|2028|306", "categoria": "FULL PLATINUM", "tipo": "CREDIT", "nome": "CRISTIANO CACHEIRO MAHIA", "cpf": "03250698679", "fornecedor": "Anon", "preco": 80.00, "saldo_minimo": 1200.00, "vendido": False},
+    {"id": "card_2", "cc": "544169******0487|05|2029|931", "categoria": "PLATINUM", "tipo": "CREDIT", "nome": "ALEXANDRE CARVALHO CHANAN", "cpf": "18319050006", "fornecedor": "Anon", "preco": 80.00, "saldo_minimo": 1200.00, "vendido": False},
+    {"id": "card_3", "cc": "509423******7847", "categoria": "PREPAID MULTIPLE VOUCHER", "tipo": "DEBIT", "nome": "DANIELE SILVA DE OLIVEIRA", "cpf": "09078890690", "fornecedor": "Anon", "preco": 50.00, "saldo_minimo": 500.00, "vendido": False},
+    {"id": "card_4", "cc": "470598******5141", "categoria": "PLATINUM", "tipo": "CREDIT", "nome": "ALESSANDRO FERNANDES GOMES PEREIRA", "cpf": "11257194780", "fornecedor": "Anon", "preco": 80.00, "saldo_minimo": 1200.00, "vendido": False},
 ]
 
 DADOS_CARTOES = [edificar_item_estoque(item) for item in ESTOQUE_BRUTO]
@@ -273,13 +266,13 @@ async def expirador_pix(chat_id: int, message_id: int, valor: float, segundos: i
         logger.warning(f"Erro ao apagar mensagem expirada: {e}")
 
 async def anti_sleep_ping():
-    async with httpx.AsyncClient() as client:
-        while True:
-            await asyncio.sleep(300)
-            try:
-                await client.get(f"{WEBHOOK_BASE_URL.rstrip('/')}/")
-            except Exception:
-                pass
+    while True:
+        await asyncio.sleep(300)
+        try:
+            if http_client:
+                await http_client.get(f"{WEBHOOK_BASE_URL.rstrip('/')}/")
+        except Exception:
+            pass
 
 async def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
     url = "https://api.misticpay.com/api/transactions/create"
@@ -301,15 +294,14 @@ async def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str)
     }
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload, headers=headers, timeout=10.0)
-            if response.status_code in [200, 201]:
-                res = response.json()
-                data_obj = res.get("data", {})
-                pix_code = data_obj.get("copyPaste") or data_obj.get("qrcodeUrl") or data_obj.get("qrCodeBase64")
-                if pix_code:
-                    return {"pix_code": pix_code}
-            return {"erro": f"Status {response.status_code}: {response.text}"}
+        response = await http_client.post(url, json=payload, headers=headers, timeout=10.0)
+        if response.status_code in [200, 201]:
+            res = response.json()
+            data_obj = res.get("data", {})
+            pix_code = data_obj.get("copyPaste") or data_obj.get("qrcodeUrl") or data_obj.get("qrCodeBase64")
+            if pix_code:
+                return {"pix_code": pix_code}
+        return {"erro": f"Status {response.status_code}: {response.text}"}
     except Exception as e:
         return {"erro": f"Falha de conexão: {str(e)}"}
 
@@ -530,7 +522,6 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.inline_query.answer(results, cache_time=1)
 
 def montar_texto_cartao_unitario(item: dict) -> str:
-    """Monta a exibição pré-compra idêntica à imagem 3 do cliente."""
     return (
         f"Número do Cartão: {item['cc_mascarado']}\n"
         f"Banco: {item['banco']}\n"
@@ -555,7 +546,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     chat_id = query.message.chat_id
 
-    saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
+    saldo_atual = get_saldo(user_id)
 
     if data == "verificar":
         CACHE_CANAL.pop(user_id, None)
@@ -699,19 +690,20 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="HTML",
                 )
             else:
-                SALDO_USUARIOS[user_id] -= card["preco"]
-                card["vendido"] = True
-                await query.message.reply_text(
-                    f"🎉 <b>COMPRA CONCLUÍDA - CASABLANCA SHOP</b>\n\n"
-                    f"<b>Dados do Cartão:</b>\n<code>{card['cc_full']}</code>\n"
-                    f"<b>Nome:</b> {card['nome']}\n"
-                    f"<b>CPF:</b> {card['cpf']}\n"
-                    f"<b>Banco:</b> {card['banco']}\n"
-                    f"<b>Nível:</b> {card['nivel_formatado']}\n"
-                    f"<b>Bandeira:</b> {card['bandeira']}\n\n"
-                    f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
-                    parse_mode="HTML",
-                )
+                if descontar_saldo(user_id, card["preco"]):
+                    card["vendido"] = True
+                    novo_saldo = get_saldo(user_id)
+                    await query.message.reply_text(
+                        f"🎉 <b>COMPRA CONCLUÍDA - CASABLANCA SHOP</b>\n\n"
+                        f"<b>Dados do Cartão:</b>\n<code>{card['cc_full']}</code>\n"
+                        f"<b>Nome:</b> {card['nome']}\n"
+                        f"<b>CPF:</b> {card['cpf']}\n"
+                        f"<b>Banco:</b> {card['banco']}\n"
+                        f"<b>Nível:</b> {card['nivel_formatado']}\n"
+                        f"<b>Bandeira:</b> {card['bandeira']}\n\n"
+                        f"Novo Saldo: R$ {novo_saldo:,.2f}",
+                        parse_mode="HTML",
+                    )
 
     elif data == "voltar_inicio":
         try:
@@ -720,6 +712,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await enviar_menu_principal(update, context)
 
+# Handlers do Telegram Bot
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
 telegram_app.add_handler(InlineQueryHandler(inline_search))
@@ -728,14 +721,21 @@ telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_aten
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global http_client
+    http_client = httpx.AsyncClient()
+    
     await telegram_app.initialize()
     await telegram_app.start()
     webhook_url = f"{WEBHOOK_BASE_URL.rstrip('/')}/telegram-webhook"
     await telegram_app.bot.set_webhook(url=webhook_url)
     asyncio.create_task(anti_sleep_ping())
+    
     yield
+    
+    await telegram_app.bot.delete_webhook()
     await telegram_app.stop()
     await telegram_app.shutdown()
+    await http_client.aclose()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -750,13 +750,13 @@ async def telegram_webhook(request: Request):
 async def misticpay_webhook(request: Request):
     try:
         payload = await request.json()
-        status = payload.get("status")
+        status = str(payload.get("status", "")).upper()
         value = float(payload.get("value", 0))
         description = payload.get("description", "")
 
-        if status == "COMPLETO" and "User " in description:
+        if status in ["COMPLETO", "APPROVED", "PAID"] and "User " in description:
             user_id = int(description.split("User ")[1])
-            SALDO_USUARIOS[user_id] = SALDO_USUARIOS.get(user_id, 0.0) + value
+            add_saldo(user_id, value)
 
             texto_sucesso = (
                 f"🔹 <b>CASABLANCA SHOP | PAGAMENTO CONFIRMADO</b> 🔹\n\n"
