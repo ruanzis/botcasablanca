@@ -1061,10 +1061,9 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
-   try:
+    try:
         global DADOS_CARTOES
-       
-        # Regex para capturar os campos da ficha
+
         cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
         banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
         nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
@@ -1080,19 +1079,9 @@ async def add_estoque(update, context):
         if not cartao_match:
             return await update.message.reply_text("❌ Não foi possível identificar o 'Número do Cartão' na ficha enviada.")
 
-        # Função auxiliar para conversão segura de valores monetários
-        def converte_valor(match, valor_padrao):
-            if not match:
-                return valor_padrao
-            val_str = match.group(1).strip()
-            if "," in val_str:
-                val_str = val_str.replace(".", "").replace(",", ".")
-            return float(val_str)
+        preco_val = float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0
+        saldo_val = float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0
 
-        preco_val = converte_valor(preco_match, 80.0)
-        saldo_val = converte_valor(saldo_match, 1200.0)
-
-        # Montagem do dicionário (DADOS_CARTOES já disponível no escopo)
         card_raw = {
             "id": f"card_{len(DADOS_CARTOES) + 1}",
             "cc": cartao_match.group(1).strip(),
@@ -1107,9 +1096,7 @@ async def add_estoque(update, context):
             "vendido": False
         }
 
-        # Processamento via função externa
         item_processado = edificar_item_estoque(card_raw)
-
         DADOS_CARTOES.append(item_processado)
 
         await update.message.reply_text(
