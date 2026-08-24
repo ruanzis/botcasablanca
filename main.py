@@ -1048,6 +1048,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await enviar_menu_principal(update, context)
 
+telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
 telegram_app.add_handler(InlineQueryHandler(inline_search))
@@ -1096,6 +1097,54 @@ async def misticpay_webhook(request: Request):
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# Adicionar por volta da linha 1099 (ANTES de @app.get("/") e do uvicorn.run)
+
+async def add_estoque(update, context):
+    user_id = update.effective_user.id
+    chat_type = update.effective_chat.type
+    
+    # 1. Trava de segurança: Somente mensagem privada (DM)
+    if chat_type != 'private':
+        await update.message.reply_text("❌ Este comando só pode ser usado no privado.")
+        return
+
+    # 2. Trava de segurança: ID do Administrador
+    ADMIN_IDS = [123456789]  # Coloque seu ID aqui
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("🚫 Acesso negado.")
+        return
+
+    try:
+        # Pega os argumentos passados no comando (/add_estoque 470598 ITAU PLATINUM 80.00)
+        args = context.args
+        bin_cartao, banco, categoria, preco = args[0], args[1], args[2], args[3]
+
+        novo_item = {
+            "cartao": f"{bin_cartao}******0000",
+            "banco": banco.upper(),
+            "categoria": categoria.upper(),
+            "preco": preco,
+            "tipo": "Crédito"
+        }
+
+        # Importa/adiciona na lista de estoque
+        from estoque import estoque_novos_cartoes
+        estoque_novos_cartoes.append(novo_item)
+
+        await update.message.reply_text(
+            f"✅ **Item cadastrado com sucesso!**\n"
+            f"• BIN: `{bin_cartao}`\n"
+            f"• Banco: {banco.upper()}\n"
+            f"• Categoria: {categoria.upper()}\n"
+            f"• Preço: R$ {preco}",
+            parse_mode="Markdown"
+        )
+    except Exception:
+        await update.message.reply_text(
+            "⚠️ Use o formato: `/add_estoque <BIN> <BANCO> <CATEGORIA> <PRECO>`",
+            parse_mode="Markdown"
+        )
 
 @app.get("/")
 async def root():
