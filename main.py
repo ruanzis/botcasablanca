@@ -1062,7 +1062,13 @@ async def add_estoque(update, context):
     # Pega o texto completo enviado na mensagem
     texto_bruto = update.message.text or ""
 
+# Pega o texto completo enviado na mensagem
+    texto_bruto = update.message.text or ""
+    
     try:
+        # Importa o estoque ANTES de usar no dicionário card_raw
+        from estoque import estoque_novos_cartoes
+        
         # Regex ajustado para capturar exatamente os campos da sua ficha
         cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
         banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
