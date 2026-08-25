@@ -14,6 +14,7 @@ import os
 import json
 import firebase_admin
 from firebase_admin import credentials, firestore
+from google.cloud import firestore as google_firestore
 from dotenv import load_dotenv
 
 # Carrega variáveis locais de um arquivo .env se você estiver testando no seu computador
