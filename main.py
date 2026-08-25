@@ -1131,7 +1131,6 @@ async def add_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ Envie os cartões junto com o comando /add_estoque."
         )
 
-    # Divide a mensagem inteira usando a frase "Número do Cartão:" como separador exato de cada ficha
     fichas = texto_completo.split("Número do Cartão:")
     contador = 0
 
@@ -1143,7 +1142,6 @@ async def add_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not ficha.strip():
             continue
 
-        # Reconstrói a string da ficha adicionando o cabeçalho que foi cortado no split
         bloco = "Número do Cartão:" + ficha
 
         try:
@@ -1196,7 +1194,6 @@ async def add_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_id=aguardando_msg.message_id,
         text=f"✅ **Sucesso!** {contador} cartões foram salvos diretamente no Firebase Firestore!",
     )
-
         try:
             # Buscas flexíveis por regex para capturar os dados independente de pequenos detalhes
             cartao_match = re.search(r'(?:Número do Cartão|Cartão|CC)[:\s]*([^\n]+)', ficha, re.IGNORECASE)
