@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import re
+import string
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -35,6 +36,9 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
 ID_CANAL = os.getenv("ID_CANAL", "@oficialharidade")
 
+# 👇👇👇 COLOQUE O SEU ID DO TELEGRAM AQUI PARA CONSEGUIR CRIAR KEYS 👇👇👇
+ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789")) 
+
 LINK_CANAL_VERIFICACAO = "https://t.me/oficialharidade"
 LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
@@ -57,6 +61,7 @@ SALDO_USUARIOS = {}
 CACHE_CANAL = {}
 INDICACOES_USUARIOS = {} # {user_id: referrer_id}
 TOTAL_INDICADOS = {}     # {user_id: count}
+CHAVES_RESGATE = {}      # {codigo_key: {dados_do_cartão}}
 
 # --- CATÁLOGO DE FERRAMENTAS ---
 CATALOGO_FERRAMENTAS = [
@@ -538,6 +543,112 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_to_message_id=msg_id
         )
 
+# --- COMANDO /KEY (CRIAÇÃO E RESGATE) ---
+async def comando_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    msg_id = update.message.message_id
+    texto_msg = update.message.text
+    
+    # Extrai tudo o que foi enviado após o comando /key
+    args_raw = texto_msg.replace("/key", "", 1).strip()
+    
+    if not args_raw:
+        await update.message.reply_text(
+            "🔹 <b>SISTEMA DE KEYS</b> 🔹\n\n"
+            "📥 <b>Para resgatar:</b> <code>/key CÓDIGO_AQUI</code>\n\n"
+            "⚙️ <b>Para Admin criar:</b>\n"
+            "<code>/key Numero:XXXX...</code>\n"
+            "<code>Titular:...</code>",
+            parse_mode="HTML",
+            reply_to_message_id=msg_id
+        )
+        return
+
+    # Se conter múltiplas linhas ou identificar "numero:", é modo de CRIAÇÃO pelo Admin
+    if "\n" in args_raw or "numero:" in args_raw.lower():
+        if user_id != ADMIN_ID:
+            await update.message.reply_text("❌ Você não tem permissão para criar Keys.", reply_to_message_id=msg_id)
+            return
+        
+        # Realiza o Parse dos dados e coloca em um dicionário
+        linhas = args_raw.split("\n")
+        dados = {}
+        for linha in linhas:
+            if ":" in linha:
+                chave, valor = linha.split(":", 1)
+                chave_formatada = chave.strip().lower().replace("ú", "u").replace(" ", "_")
+                dados[chave_formatada] = valor.strip()
+        
+        # Gerar o código de resgate aleatório (ex: 8 dígitos A-Z/0-9)
+        codigo = "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        CHAVES_RESGATE[codigo] = dados
+        
+        await update.message.reply_text(
+            f"✅ <b>KEY CRIADA COM SUCESSO!</b>\n\n"
+            f"🔑 <b>Código:</b> <code>{codigo}</code>\n\n"
+            f"Para o cliente resgatar, basta ele enviar no bot:\n"
+            f"<code>/key {codigo}</code>",
+            parse_mode="HTML",
+            reply_to_message_id=msg_id
+        )
+        
+    else:
+        # MODO RESGATE PARA USUÁRIOS COMUNS
+        codigo = args_raw.upper().strip()
+        if codigo not in CHAVES_RESGATE:
+            await update.message.reply_text(
+                "❌ <b>Key inválida, inexistente ou já resgatada.</b>", 
+                parse_mode="HTML", 
+                reply_to_message_id=msg_id
+            )
+            return
+        
+        # Consome a Key e formata a resposta
+        dados = CHAVES_RESGATE.pop(codigo)
+        
+        numero = dados.get("numero", "N/A")
+        titular = dados.get("titular", "N/A")
+        validade = dados.get("validade", "N/A")
+        cvv = dados.get("cvv", "N/A")
+        banco = dados.get("banco", "N/A")
+        bandeira = dados.get("bandeira", "N/A")
+        tipo = dados.get("tipo", "N/A")
+        base = dados.get("base", "N/A")
+        bin_num = dados.get("bin", "N/A")
+        cpf = dados.get("cpf", "N/A")
+        
+        # O Admin pode ter digitado "Data Nasc:" ou "Data de nascimento:"
+        data_nasc = dados.get("data_nasc", dados.get("data_de_nascimento", "N/A"))
+        
+        texto_resgate = (
+            f"✅ Cartão comprado com Sucesso!\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"💳 DADOS DO FULL\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔢 Número: <code>{numero}</code>\n"
+            f"👤 Titular: <code>{titular}</code>\n"
+            f"📅 Validade: <code>{validade}</code>\n"
+            f"🔐 CVV: <code>{cvv}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 INFORMAÇÕES\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🏦 Banco: {banco}\n"
+            f"💎 Bandeira: {bandeira}\n"
+            f"⭐ Tipo: {tipo}\n"
+            f"🌟 Base: {base}\n"
+            f"🔢 BIN: <code>{bin_num}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔒 DADOS BLOQUEADOS\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📄 CPF: <code>{cpf}</code>\n"
+            f"🎂 Data Nasc: <code>{data_nasc}</code>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 Cartão Resgatado com sucesso!"
+        )
+        
+        await update.message.reply_text(texto_resgate, parse_mode="HTML", reply_to_message_id=msg_id)
+
+
 async def IA_atendimento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.lower()
     msg_id = update.message.message_id
@@ -951,6 +1062,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- REGISTRO DE HANDLERS ---
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
+telegram_app.add_handler(CommandHandler("key", comando_key)) # NOVO HANDLER REGISTRADO AQUI
 telegram_app.add_handler(InlineQueryHandler(inline_search))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
