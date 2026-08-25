@@ -16,8 +16,6 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
 
-import json
-
 # Inicialização do Firebase Firestore
 if not firebase_admin._apps:
     firebase_json_env = os.environ.get("FIREBASE_CREDENTIALS_JSON")
@@ -29,7 +27,8 @@ if not firebase_admin._apps:
     
     firebase_admin.initialize_app(cred)
 
-db = firestore.client(Default)
+# Inicializa o cliente do Firestore explicitamente
+db = firestore.client()
 
 SALDO_USUARIOS = {}
 CACHE_CANAL = {}
