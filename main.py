@@ -10,6 +10,28 @@ from fastapi import FastAPI, Request
 import qrcode
 import httpx
 import uvicorn
+import os
+import json
+import firebase_admin
+from firebase_admin import credentials, firestore
+from dotenv import load_dotenv
+
+# Carrega variáveis locais de um arquivo .env se você estiver testando no seu computador
+load_dotenv()
+
+# Pega o conteúdo do JSON que estará salvo nas configurações do servidor/GitHub Actions
+firebase_config_str = os.getenv("FIREBASE_CREDENTIALS_JSON")
+
+if firebase_config_str:
+    # Se a variável existir (usado no servidor/produção)
+    cred_dict = json.loads(firebase_config_str)
+    cred = credentials.Certificate(cred_dict)
+else:
+    # Se estiver rodando localmente no seu PC usando o arquivo JSON direto
+    cred = credentials.Certificate("firebase_key.json")
+
+firebase_admin.initialize_app(cred)
+db = firestore.client()
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
