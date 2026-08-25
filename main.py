@@ -911,6 +911,138 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🗽 Login's", callback_data="logins")],
             [InlineKeyboardButton("🔙 Voltar ao Menu", callback_data="voltar_inicio")],
         ]
+        import os
+import re
+import random
+import asyncio
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+import uvicorn
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    InlineQueryHandler,
+    MessageHandler,
+    filters,
+    ContextTypes
+)
+
+# ==============================================================================
+# CONFIGURAÇÕES E VARIÁVEIS GLOBAIS
+# ==============================================================================
+TOKEN = os.environ.get("TELEGRAM_TOKEN", "SEU_TOKEN_AQUI")
+WEBHOOK_BASE_URL = os.environ.get("WEBHOOK_BASE_URL", "https://seu-app.onrender.com")
+LINK_SUPORTE = "https://t.me/seu_suporte"
+
+SALDO_USUARIOS = {}
+DADOS_CARTOES = []
+
+CATALOGO_UNITARIAS = [
+    {"id": "gold", "nome": "GOLD", "preco": 30.0, "qtd": 10},
+    {"id": "platinum", "nome": "PLATINUM", "preco": 50.0, "qtd": 5},
+    {"id": "black", "nome": "BLACK / INFINITE", "preco": 90.0, "qtd": 2},
+]
+
+POLITICA_REEMBOLSO = (
+    "🔹 <b>CASABLANCA SHOP | POLÍTICA DE REEMBOLSO</b> 🔹\n\n"
+    "1. Troca apenas em caso de senha inválida ou saldo insuficiente.\n"
+    "2. O prazo para reclamação é de até 5 minutos após a compra.\n"
+    "3. Necessário enviar vídeo/print da tentativa.\n"
+)
+
+# ==============================================================================
+# FUNÇÕES AUXILIARES DE FORMATAÇÃO E ESTOQUE
+# ==============================================================================
+def edificar_item_estoque(card_raw):
+    cc = card_raw["cc"]
+    bin_num = cc[:6] if len(cc) >= 6 else "000000"
+    
+    # Exemplo simples de mascaramento do cartão
+    cc_mascarado = f"{bin_num}******{cc[-4:]}" if len(cc) >= 10 else "****************"
+    
+    card_raw["bin"] = bin_num
+    card_raw["cc_mascarado"] = cc_mascarado
+    card_raw["bandeira"] = "MASTERCARD" if bin_num.startswith("5") else "VISA"
+    card_raw["nivel_formatado"] = card_raw.get("nivel", "STANDARD")
+    card_raw["cc_full"] = cc
+    return card_raw
+
+def montar_texto_cartao_unitario(card):
+    return (
+        f"🔹 <b>CASABLANCA SHOP | CC FULL</b> 🔹\n\n"
+        f"• <b>Banco:</b> {card['banco']}\n"
+        f"• <b>Nível:</b> {card['nivel_formatado']}\n"
+        f"• <b>Bandeira:</b> {card['bandeira']}\n"
+        f"• <b>Preço:</b> R$ {card['preco']:,.2f}\n"
+        f"• <b>Saldo Mínimo:</b> R$ {card.get('saldo_minimo', 0):,.2f}\n\n"
+        f"<i>Clique abaixo para efetuar a compra com seu saldo.</i>"
+    )
+
+# ==============================================================================
+# FUNÇÕES DE COMANDOS E MENUS PRINCIPAIS
+# ==============================================================================
+async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    texto = "🔹 <b>CASABLANCA SHOP | MENU PRINCIPAL</b> 🔹\n\nEscolha uma opção abaixo:"
+    keyboard = [
+        [InlineKeyboardButton("🛒 Comprar CC Full", callback_data="voltar_cc_full")],
+        [InlineKeyboardButton("💰 Adicionar Saldo (Pix)", callback_data="menu_pix")],
+        [InlineKeyboardButton("💬 Atendimento/Suporte", url=LINK_SUPORTE)]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+    await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=markup, parse_mode="HTML")
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await enviar_menu_principal(update, context)
+
+async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    args = context.args
+    valor = "50.00"
+    if args:
+        valor = args[0]
+    
+    texto = (
+        f"🔹 <b>CASABLANCA SHOP | ADICIONAR SALDO VIA PIX</b> 🔹\n\n"
+        f"Valor solicitado: <b>R$ {valor}</b>\n\n"
+        f"<i>(Integração MisticPay ativa)</i>"
+    )
+    await update.message.reply_text(texto, parse_mode="HTML")
+
+async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Função de busca inline (mantida estruturalmente)
+    query = update.inline_query.query
+    results = []
+    await update.inline_query.answer(results)
+
+async def IA_atendimento(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Resposta padrão de IA/Atendimento para mensagens de texto comuns
+    if update.message and update.message.text:
+        await update.message.reply_text("🤖 Olá! Sou o assistente virtual da Casablanca Shop. Use o /start para abrir o menu.")
+
+# ==============================================================================
+# CALLBACK QUERY HANDLER (BOTÕES INLINE)
+# ==============================================================================
+async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+    saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
+
+    if data == "menu_pix":
+        texto = "🔹 <b>CASABLANCA SHOP | PIX</b> 🔹\n\nDigite o comando /pix seguido do valor desejado (Ex: <code>/pix 50</code>)."
+        keyboard = [[InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")]]
+        await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data == "menu_comprar":
+        keyboard = [
+            [InlineKeyboardButton("🔢 Unitárias", callback_data="ver_unitarias")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")]
+        ]
         markup = InlineKeyboardMarkup(keyboard)
         texto = "🔹 <b>CASABLANCA SHOP | CATÁLOGO</b> 🔹\n\nEscolha a categoria desejada:"
         if query.message.photo:
@@ -931,7 +1063,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("🇧🇷 Bandeira", switch_inline_query_current_chat=""),
             ],
             [InlineKeyboardButton("💬 Atendimento/suporte", url=LINK_SUPORTE)],
-            [InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")],
         ]
         texto = f"🔹 <b>CASABLANCA SHOP | CC FULL DADOS</b> 🔹\n\nInformações:\n- Saldo: R$ {saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         markup = InlineKeyboardMarkup(keyboard)
@@ -998,21 +1130,6 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.message.edit_text(texto_card, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-    elif data == "nav_prev" or data == "nav_next":
-        cartoes_validos = [c for c in DADOS_CARTOES if not c["vendido"]]
-        if cartoes_validos:
-            card = random.choice(cartoes_validos)
-            texto_card = montar_texto_cartao_unitario(card)
-            keyboard = [
-                [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{card['id']}")],
-                [
-                    InlineKeyboardButton("⬅️ Anterior", callback_data="nav_prev"),
-                    InlineKeyboardButton("Próximo ➡️", callback_data="nav_next"),
-                ],
-                [InlineKeyboardButton("❌ Cancelar", callback_data="voltar_cc_full")],
-            ]
-            await query.message.edit_text(texto_card, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
     elif data.startswith("buy_card_"):
         card_id = data.replace("buy_card_", "")
         card = next((c for c in DADOS_CARTOES if c["id"] == card_id), None)
@@ -1052,7 +1169,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==============================================================================
 # FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM)
 # ==============================================================================
-async def add_estoque(update, context):
+async def add_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if update.effective_chat.type != 'private':
         return await update.message.reply_text("❌ Este comando só pode ser usado no privado.")
@@ -1115,12 +1232,22 @@ async def add_estoque(update, context):
     except Exception as e:
         await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
 
+# ==============================================================================
+# CONFIGURAÇÃO DO APLICATIVO TELEGRAM E FASTAPI
+# ==============================================================================
+telegram_app = Application.builder().token(TOKEN).build()
+
+# Registro de handlers
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
 telegram_app.add_handler(InlineQueryHandler(inline_search))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
+
+async def anti_sleep_ping():
+    while True:
+        await asyncio.sleep(300)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1164,14 +1291,6 @@ async def misticpay_webhook(request: Request):
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
-
-# --- REGISTRO DE COMANDOS DO TELEGRAM ---
-telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("pix", comando_pix))
-telegram_app.add_handler(InlineQueryHandler(inline_search))
-telegram_app.add_handler(CallbackQueryHandler(botao_callback))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
 
 @app.get("/")
 async def root():
