@@ -16,9 +16,17 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
 
-# Inicialização do Firebase Firestore (ajuste o caminho do arquivo de credenciais se necessário)
+import json
+
+# Inicialização do Firebase Firestore
 if not firebase_admin._apps:
-    cred = credentials.Certificate("firebase_key.json")
+    firebase_json_env = os.environ.get("FIREBASE_CREDENTIALS_JSON")
+    if firebase_json_env:
+        cred_dict = json.loads(firebase_json_env)
+        cred = credentials.Certificate(cred_dict)
+    else:
+        cred = credentials.Certificate("firebase_key.json")
+    
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
