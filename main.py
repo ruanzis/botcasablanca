@@ -16,9 +16,9 @@ from psycopg2.extras import RealDictCursor
 DATABASE_URL = "postgresql://postgres:2103@localhost:5432/postgres"
 
 def get_db_connection():
-    db_url = os.environ.get("DATABASE_URL")
-    if not db_url:
-        raise ValueError("A variável de ambiente DATABASE_URL não está configurada!")
+    db_url = os.environ.get("DATABASE_URL") or "postgresql://postgres:2103@localhost:5432/postgres"
+    conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+    return conn
     
     conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
     return conn
