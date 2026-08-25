@@ -1106,6 +1106,14 @@ async def add_estoque(update, context):
     except Exception as e:
         await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
 
+async def painel(update, context):
+    user_id = update.effective_user.id
+    ADMIN_IDS = [7536040475]
+    if user_id not in ADMIN_IDS:
+        return await update.message.reply_text("🚫 Acesso negado.")
+    
+    await update.message.reply_text("🛠️ **Painel Administrativo**\n\nBem-vindo ao painel de controle.", parse_mode="Markdown")
+
 # --- REGISTRO DE HANDLERS ---
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
