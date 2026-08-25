@@ -47,7 +47,7 @@ MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
 # ID DO ADMINISTRADOR PARA CRIAR KEYS (Substitua pelo seu ID do Telegram)
-ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789")) 
+ADMIN_ID = int(os.getenv("ADMIN_ID", "7536040475")) 
 
 POLITICA_REEMBOLSO = (
     "🔹 <b>SISTEMA CASABLANCA | POLÍTICA DE REEMBOLSO</b> 🔹\n\n"
