@@ -8,3 +8,5 @@ uvicorn
 requests
 qrcode
 Pillow
+firebase-admin
+python-dotenv
