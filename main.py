@@ -29,7 +29,7 @@ if not firebase_admin._apps:
     
     firebase_admin.initialize_app(cred)
 
-db = firestore.client()
+db = firestore.client(Default)
 
 SALDO_USUARIOS = {}
 CACHE_CANAL = {}
