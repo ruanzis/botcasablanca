@@ -1075,7 +1075,7 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
-cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
+    cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
     banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
     nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
     tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
