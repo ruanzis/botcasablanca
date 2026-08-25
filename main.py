@@ -85,7 +85,45 @@ POLITICA_REEMBOLSO = (
 SALDO_USUARIOS = {}
 CACHE_CANAL = {}
 # estoque.py
+# --- FUNÇÃO DE LEITURA E PARSER INTELIGENTE DO CARTÃO ---
+import re
 
+def extrair_dados_cartao(texto):
+    """
+    Lê o texto do cartão enviado e extrai as informações estruturadas
+    exatamente no formato exigido para salvar no Firestore.
+    """
+    def pegar(padrao, texto_base, tipo=str, default=None):
+        match = re.search(padrao, texto_base, re.IGNORECASE)
+        if match:
+            val = match.group(1).strip()
+            if val.upper() in ["N/D", "ND", "NAO INFORMADO", "-"]:
+                return default
+            if tipo == float:
+                val_limpo = val.replace("R$", "").replace(".", "").replace(",", ".").strip()
+                try:
+                    return float(val_limpo)
+                except ValueError:
+                    return default
+            return val
+        return default
+
+    cartao_dict = {
+        "bin": pegar(r"Número do Cartão:\s*(.+)", texto),
+        "banco": pegar(r"Banco:\s*(.+)", texto),
+        "categoria": pegar(r"Categoria:\s*(.+)", texto),
+        "tipo": pegar(r"Tipo:\s*(.+)", texto),
+        "nome": pegar(r"Nome:\s*(.+)", texto),
+        "cpf": pegar(r"CPF:\s*([\d\.\-]+)", texto),
+        "score_serasa": pegar(r"Score Serasa:\s*(.+)", texto),
+        "score_bc": pegar(r"Score BC:\s*(\d+)", texto, int),
+        "preco": pegar(r"Valor da Compra:\s*R\$\s*([\d\.,]+)", texto),
+        "limite_garantido": pegar(r"Saldo mínimo garantido:\s*R\$\s*([\d\.,]+)", texto, float),
+        "posicao": pegar(r"(Cartão\s*\d+\s*de\s*\d+)", texto)
+    }
+    
+    return cartao_dict
+---------------------------------------------------------
 estoque_novos_cartoes = [
     {
         "cartao": "470598******8057",
