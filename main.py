@@ -123,7 +123,7 @@ def extrair_dados_cartao(texto):
     }
     
     return cartao_dict
----------------------------------------------------------
+#---
 estoque_novos_cartoes = [
     {
         "cartao": "470598******8057",
