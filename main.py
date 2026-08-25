@@ -1075,7 +1075,7 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
-   cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
+    cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
     banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
     nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
     tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
@@ -1084,51 +1084,31 @@ async def add_estoque(update, context):
     preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
     saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
 
-   # Em vez de db.collection("estoque").add(dados_cartao), usamos SQL:
-
-conn = get_db_connection()
-
-cur = conn.cursor()
-
-cur.execute(
-
-    """
-
-    INSERT INTO estoque (cartao, banco, categoria, tipo, nome, cpf, preco, limite, val)
-
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-
-    """,
-
-    (
-
-        cartao_match.group(1).strip() if cartao_match else "N/D",
-
-        banco_match.group(1).strip() if banco_match else "N/D",
-
-        nivel_match.group(1).strip() if nivel_match else "STANDARD",
-
-        tipo_match.group(1).strip() if tipo_match else "Crédito",
-
-        nome_match.group(1).strip() if nome_match else "N/D",
-
-        cpf_match.group(1).strip() if cpf_match else "N/D",
-
-        preco_val,
-
-        saldo_val,
-
-        False,
-
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        """
+        INSERT INTO estoque (cartao, banco, categoria, tipo, nome, cpf, preco, limite, val)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            cartao_match.group(1).strip() if cartao_match else "N/D",
+            banco_match.group(1).strip() if banco_match else "N/D",
+            nivel_match.group(1).strip() if nivel_match else "STANDARD",
+            tipo_match.group(1).strip() if tipo_match else "Crédito",
+            nome_match.group(1).strip() if nome_match else "N/D",
+            cpf_match.group(1).strip() if cpf_match else "N/D",
+            preco_match.group(1).strip() if preco_match else "0.00",
+            saldo_match.group(1).strip() if saldo_match else "0.00",
+            "N/D"
+        )
     )
-
-)
-
-conn.commit()
-
-cur.close()
-
-conn.close() 
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    await update.message.reply_text("✅ Estoque adicionado com sucesso ao banco PostgreSQL!")
 
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
