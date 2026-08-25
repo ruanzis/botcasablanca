@@ -952,7 +952,10 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await enviar_menu_principal(update, context)
 
-# --- SISTEMA DE KEYS ADMINISTRATIVO ---
+# ==============================================================================
+# SISTEMA DE KEYS ADMINISTRATIVO E ESTOQUE
+# ==============================================================================
+
 async def comando_gerar_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
@@ -1040,9 +1043,6 @@ async def comando_resgatar_key(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await update.message.reply_text(mensagem)
 
-# ==============================================================================
-# FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM)
-# ==============================================================================
 async def add_estoque(update, context):
     user_id = update.effective_user.id
     if update.effective_chat.type != 'private':
@@ -1106,9 +1106,12 @@ async def add_estoque(update, context):
     except Exception as e:
         await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
 
-telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
+# --- REGISTRO DE HANDLERS ---
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
+telegram_app.add_handler(CommandHandler("gerar_key", comando_gerar_key))
+telegram_app.add_handler(CommandHandler("key", comando_resgatar_key))
+telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(InlineQueryHandler(inline_search))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
@@ -1117,16 +1120,6 @@ telegram_app.add_handler(CommandHandler("add_estoque_esim", add_estoque_esim))
 telegram_app.add_handler(CommandHandler("add_estoque_laras", add_estoque_laras))
 telegram_app.add_handler(CommandHandler("add_estoque_ccfullldados", add_estoque_ccfullldados))
 telegram_app.add_handler(CommandHandler("add_estoque_consultavel", add_estoque_consultavel))
-
-# --- REGISTRO DE HANDLERS ---
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("pix", comando_pix))
-telegram_app.add_handler(CommandHandler("gerar_key", comando_gerar_key)) # INJETADO: Ferramenta de Admin
-telegram_app.add_handler(CommandHandler("key", comando_resgatar_key))    # INJETADO: Resgate pelo Usuário
-telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
-telegram_app.add_handler(InlineQueryHandler(inline_search))
-telegram_app.add_handler(CallbackQueryHandler(botao_callback))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
