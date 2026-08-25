@@ -12,6 +12,40 @@ import httpx
 import uvicorn
 import psycopg2
 from psycopg2.extras import RealDictCursor
+def inicializar_banco():
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        print("DATABASE_URL não encontrada nas variáveis de ambiente.")
+        return
+
+    try:
+        conn = psycopg2.connect(database_url)
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS estoque (
+                id SERIAL PRIMARY KEY,
+                cartao VARCHAR(255),
+                banco VARCHAR(255),
+                categoria VARCHAR(100),
+                tipo VARCHAR(50),
+                nome VARCHAR(255),
+                cpf VARCHAR(50),
+                preco NUMERIC(10, 2),
+                limite NUMERIC(10, 2),
+                val VARCHAR(100),
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("Tabela 'estoque' pronta e verificada com sucesso!")
+    except Exception as e:
+        print(f"Erro ao criar tabela: {e}")
+
+# Execute a função na inicialização do bot
+inicializar_banco()
+
 # URL de conexão do PostgreSQL (Ex: Render fornece a DATABASE_URL nas variáveis de ambiente)
 DATABASE_URL = "postgresql://postgres:2103@localhost:5432/postgres"
 
