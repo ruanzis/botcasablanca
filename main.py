@@ -53,7 +53,13 @@ POLITICA_REEMBOLSO = (
     "solicite reembolso em até 20 minutos via @haridadenetwork, "
     "com vídeo mostrando cartão, valor e erro."
 )
+CATALOGO_FERRAMENTAS = [
+    {"id": "fer_klmob", "nome": "🦠 KL MOB 5.4", "descricao": "30 Dias de KL MOB 5.4", "preco": 800.00},
+    {"id": "fer_breached", "nome": "⚠️ Painel Breached", "descricao": "Painel vitalicio", "preco": 1100.00},
+    {"id": "fer_99uber", "nome": "🏍️ Painel Criar 99/Uber", "descricao": "Painel eficaz para vendas de contas da 99 Motorista e Uber Motorista. Trabalhe em case, adquira já!", "preco": 150.00},
+]
 
+SALDO_USUARIOS = {}
 SALDO_USUARIOS = {}
 CACHE_CANAL = {}
 # estoque.py
@@ -912,17 +918,19 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def montar_texto_cartao_unitario(item: dict) -> str:
     """Monta a exibição pré-compra idêntica à imagem 3 do cliente."""
     return (
-        f"Número do Cartão: {item['cc_mascarado']}\n"
+        f"Número do Cartão: <code>{item['cc_mascarado']}</code>\n"
         f"Banco: {item['banco']}\n"
         f"Categoria: {item['categoria']}\n"
-        f"Tipo: {item['tipo']}\n"
-        f"NOME: {item['nome']}\n"
-        f"CPF: {item['cpf']}\n\n"
-        f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:,.2f}</b>\n"
+        f"Tipo: Crédito\n"
+        f"Nome: <code>{item['nome']}</code>\n"
+        f"CPF: <code>{item['cpf']}</code>\n"
+        f"Score Serasa: <code>{item.get('score_serasa', 'N/A')}</code>\n"
+        f"Score BC: <code>{item.get('score_bc', 'N/A')}</code>\n\n"
+        f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:.2f}</b>\n"
         f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a <b>Política de Reembolso</b>.\n\n"
-        f"Valor da Compra: R$ {item['preco']:,.2f}\n\n"
+        f"Valor da Compra: R$ {item['preco']:.2f}\n"
         f"Fornecedor: <i>{item['fornecedor']}</i>"
-    ).replace(",", "X").replace(".", ",").replace("X", ".")
+    ).replace(",", ".").replace("X", ".").replace("x", ".")
 
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -937,6 +945,109 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
 
+
+    # === NOVOS MENUS E FERRAMENTAS ===
+    elif data in ["menu_esim", "menu_laras", "menu_ferramentas"]:
+        keyboard = []
+        
+        if data == "menu_ferramentas":
+            texto = (
+                "🔹 <b>CasaBlanca • Ferramentas</b> 🔹\n\n"
+                "🎓 Funcionalidades de ferramentas, com pronta-entrega & suporte para entrega solidária em @haridadenetwork\n\n"
+                "Selecione abaixo sua ferramenta desejada:"
+            )
+            for item in CATALOGO_FERRAMENTAS:
+                keyboard.append([InlineKeyboardButton(f"{item['nome']}", callback_data=f"info_{item['id']}")])
+        else:
+            if data == "menu_esim":
+                lista_atual = CATALOGO_ESIM
+                titulo = "E-SIM"
+            else:
+                lista_atual = CATALOGO_LARAS
+                titulo = "LARAS"
+                
+            texto = f"🛍 <b>Produtos em VOLTPIX - O MED E SAQUES CRIPTO (BEP20):</b>\n\nSelecione um produto da categoria {titulo}:"
+            for item in lista_atual:
+                if item.get("qtd", 1) > 0:
+                    keyboard.append([InlineKeyboardButton(f"{item['nome']} - R$ {item['preco']:.2f} ({item['qtd']})", callback_data=f"info_{item['id']}")])
+        
+        keyboard.append([InlineKeyboardButton("⬅️ Voltar para Categorias", callback_data="voltar_inicio")])
+        await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("info_"):
+        item_id = data.split("_", 1)[1]
+        item = next((i for i in CATALOGO_FERRAMENTAS + CATALOGO_ESIM + CATALOGO_LARAS if i["id"] == item_id), None)
+        
+        if not item:
+            return await query.answer("❌ Produto indisponível.", show_alert=True)
+            
+        desc = f"\nDescrição: {item['descricao']}" if "descricao" in item else ""
+        qtd = f"\nQuantidade em estoque: {item['qtd']}" if "qtd" in item else ""
+        
+        texto_info = (
+            f"🛒 <b>Confirmar Compra</b>\n\n"
+            f"Produto: <b>{item['nome']}</b>{desc}\n"
+            f"Valor: R$ {item['preco']:.2f}{qtd}\n\n"
+            f"Deseja finalizar a compra usando seu saldo?"
+        )
+        keyboard = [
+            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_{item['id']}")],
+            [InlineKeyboardButton("⬅️ Anterior", callback_data="voltar_inicio"),
+             InlineKeyboardButton("Próximo ➡️", callback_data="voltar_inicio")]
+        ]
+        await query.message.edit_text(texto_info, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data == "menu_perfil":
+        user_id = update.effective_user.id
+        nome = update.effective_user.first_name
+        saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
+        
+        texto_perfil = (
+            f"<b>{nome}</b> ❗️\n"
+            f"/menu\n"
+            f"👤 <b>Perfil</b>\n"
+            f"- Nome: <i>{nome}</i> ❗️\n"
+            f"- Id: <code>{user_id}</code>\n\n"
+            f"💰 <b>Carteira</b>\n"
+            f"- Saldo: R$ {saldo_atual:.2f}\n"
+            f"- Compras: 0"
+        )
+        keyboard = [
+            [InlineKeyboardButton("🟢 Adicionar saldo", callback_data="add_saldo"),
+             InlineKeyboardButton("📄 Histórico", callback_data="historico_compras")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")]
+        ]
+        await query.message.edit_text(texto_perfil, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data == "menu_indicacao":
+        user_id = update.effective_user.id
+        nome = update.effective_user.first_name
+        bot_username = (await context.bot.get_me()).username
+        link_indicacao = f"https://t.me/{bot_username}?start={user_id}"
+        
+        texto_ind = (
+            f"<b>{nome}</b> ❗️\n"
+            f"/menu\n"
+            f"🚀 <b>Sistema de Indicação</b>\n\n"
+            f"Compartilhe seu link e ganhe quando um indicado fizer a primeira recarga.\n\n"
+            f"💰 Você escolhe como receber:\n\n"
+            f"• 50% se converter em saldo no bot\n"
+            f"• 30% se receber via Pix\n\n"
+            f"📊 <b>Suas informações:</b>\n\n"
+            f"• Seu indicador: Não indicado.\n"
+            f"• Seus Indicados: 0\n\n"
+            f"💵 <b>Disponível agora:</b>\n"
+            f"• Para saldo no bot: R$ 0,00\n"
+            f"• Para receber via Pix: R$ 0,00\n\n"
+            f"Use os botões abaixo para ver seu link, converter em saldo ou receber via Pix."
+        )
+        keyboard = [
+            [InlineKeyboardButton("🔗 Meu link", url=link_indicacao)],
+            [InlineKeyboardButton("💰 Receber via Pix", callback_data="saque_pix"),
+             InlineKeyboardButton("🔄 Converter em saldo", callback_data="converter_saldo")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")]
+        ]
+        await query.message.edit_text(texto_ind, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
     if data == "verificar":
         CACHE_CANAL.pop(user_id, None)
         if await esta_no_canal(context, user_id):
