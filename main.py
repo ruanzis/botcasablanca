@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # Configurações de Ambiente
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
-ID_CANAL = os.getenv("ID_CANAL", "-1004302224747")
+ID_CANAL = os.getenv("ID_CANAL", "@oficialharidade")
 
 LINK_CANAL_VERIFICACAO = "https://t.me/oficialharidade"
 LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
