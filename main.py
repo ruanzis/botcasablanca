@@ -1102,12 +1102,12 @@ async def add_estoque(update, context):
             preco_match.group(1).strip() if preco_match else "0.00",
             saldo_match.group(1).strip() if saldo_match else "0.00",
             "N/D"
-        )
+       )
     )
     conn.commit()
     cur.close()
     conn.close()
-    
+
     await update.message.reply_text("✅ Estoque adicionado com sucesso ao banco PostgreSQL!")
 
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
