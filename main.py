@@ -1071,57 +1071,51 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
-    try:
-        global DADOS_CARTOES
+   # Em vez de db.collection("estoque").add(dados_cartao), usamos SQL:
 
-        cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
-        banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
-        nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
-        tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
-        nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
-        cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
-        preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
-        saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
+conn = get_db_connection()
 
-        tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", texto_bruto)
-        categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
+cur = conn.cursor()
 
-        if not cartao_match:
-            return await update.message.reply_text("❌ Não foi possível identificar o 'Número do Cartão' na ficha enviada.")
+cur.execute(
 
-        preco_val = float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0
-        saldo_val = float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0
+    """
 
-        card_raw = {
-            "id": f"card_{len(DADOS_CARTOES) + 1}",
-            "cc": cartao_match.group(1).strip(),
-            "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
-            "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
-            "categoria_produto": categoria_final,
-            "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
-            "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
-            "cpf": cpf_match.group(1).strip() if cpf_match else "",
-            "preco": preco_val,
-            "saldo_minimo": saldo_val,
-            "vendido": False
-        }
+    INSERT INTO estoque (cartao, banco, categoria, tipo, nome, cpf, preco, limite, val)
 
-        item_processado = edificar_item_estoque(card_raw)
-        DADOS_CARTOES.append(item_processado)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
 
-        await update.message.reply_text(
-            f"✅ **Item Processado e Adicionado!**\n\n"
-            f"• **BIN:** `{item_processado['bin']}`\n"
-            f"• **Banco:** {item_processado['banco']}\n"
-            f"• **Bandeira:** {item_processado['bandeira']}\n"
-            f"• **Nível:** {item_processado['nivel_formatado']}\n"
-            f"• **Preço:** R$ {item_processado['preco']:.2f}\n"
-            f"• **Cartão Mascarado:** `{item_processado['cc_mascarado']}`",
-            parse_mode="Markdown"
-        )
+    """,
 
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
+    (
+
+        cartao_match.group(1).strip() if cartao_match else "N/D",
+
+        banco_match.group(1).strip() if banco_match else "N/D",
+
+        nivel_match.group(1).strip() if nivel_match else "STANDARD",
+
+        tipo_match.group(1).strip() if tipo_match else "Crédito",
+
+        nome_match.group(1).strip() if nome_match else "N/D",
+
+        cpf_match.group(1).strip() if cpf_match else "N/D",
+
+        preco_val,
+
+        saldo_val,
+
+        False,
+
+    )
+
+)
+
+conn.commit()
+
+cur.close()
+
+conn.close() 
 
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
