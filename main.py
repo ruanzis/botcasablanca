@@ -16,24 +16,15 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
 
-# Carrega variáveis locais de um arquivo .env se você estiver testando no seu computador
-load_dotenv()
-
-# Pega o conteúdo do JSON que estará salvo nas configurações do servidor/GitHub Actions
-firebase_config_str = os.getenv("FIREBASE_CREDENTIALS_JSON")
-
-if firebase_config_str:
-    # Se a variável existir (usado no servidor/produção)
-    cred_dict = json.loads(firebase_config_str)
-    cred = credentials.Certificate(cred_dict)
-else:
-    # Se estiver rodando localmente no seu PC usando o arquivo JSON direto
+# Inicialização do Firebase Firestore (ajuste o caminho do arquivo de credenciais se necessário)
+if not firebase_admin._apps:
     cred = credentials.Certificate("firebase_key.json")
+    firebase_admin.initialize_app(cred)
 
-firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# Teste rápido de conexão com o Firestore
+SALDO_USUARIOS = {}
+CACHE_CANAL = {}
 try:
     print("Conexão com o Firebase Firestore estabelecida com sucesso!")
 except Exception as e:
