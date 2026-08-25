@@ -953,7 +953,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await enviar_menu_principal(update, context)
 
 # ==============================================================================
-# SISTEMA DE KEYS ADMINISTRATIVO E ESTOQUE
+# SISTEMA DE KEYS ADMINISTRATIVO E ESTOQUE (CORRIGIDO)
 # ==============================================================================
 
 async def comando_gerar_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1043,13 +1043,13 @@ async def comando_resgatar_key(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await update.message.reply_text(mensagem)
 
-async def add_estoque(update, context):
+async def add_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if update.effective_chat.type != 'private':
         return await update.message.reply_text("❌ Este comando só pode ser usado no privado.")
 
-    ADMIN_IDS = [7536040475]
-    if user_id not in ADMIN_IDS:
+    ADMIN_IDS_LIST = [7536040475]
+    if user_id not in ADMIN_IDS_LIST and user_id != ADMIN_ID:
         return await update.message.reply_text("🚫 Acesso negado.")
 
     texto_bruto = update.message.text or ""
@@ -1106,10 +1106,10 @@ async def add_estoque(update, context):
     except Exception as e:
         await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
 
-async def painel(update, context):
+async def painel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    ADMIN_IDS = [7536040475]
-    if user_id not in ADMIN_IDS:
+    ADMIN_IDS_LIST = [7536040475]
+    if user_id not in ADMIN_IDS_LIST and user_id != ADMIN_ID:
         return await update.message.reply_text("🚫 Acesso negado.")
     
     await update.message.reply_text("🛠️ **Painel Administrativo**\n\nBem-vindo ao painel de controle.", parse_mode="Markdown")
