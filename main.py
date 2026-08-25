@@ -1189,62 +1189,74 @@ async def add_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id=update.effective_chat.id,
         message_id=aguardando_msg.message_id,
         text=f"✅ **Sucesso!** {contador} cartões foram salvos diretamente no Firebase Firestore!",
+    )async def add_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return await update.message.reply_text(
+            "❌ Este comando só pode ser usado no privado."
+        )
+
+    texto_completo = update.message.text or ""
+    if texto_completo.startswith("/add_estoque"):
+        texto_completo = texto_completo.replace("/add_estoque", "", 1).strip()
+
+    if not texto_completo:
+        return await update.message.reply_text(
+            "❌ Envie os cartões junto com o comando /add_estoque."
+        )
+
+    fichas = texto_completo.split("Número do Cartão:")
+    contador = 0
+
+    aguardando_msg = await update.message.reply_text(
+        "⏳ Processando e salvando no Firebase..."
     )
-    )
-    )
-        try:
-            # Buscas flexíveis por regex para capturar os dados independente de pequenos detalhes
-            cartao_match = re.search(r'(?:Número do Cartão|Cartão|CC)[:\s]*([^\n]+)', ficha, re.IGNORECASE)
-            banco_match = re.search(r'Banco[:\s]*([^\n]+)', ficha, re.IGNORECASE)
-            nivel_match = re.search(r'(?:Categoria|Nível)[:\s]*([^\n]+)', ficha, re.IGNORECASE)
-            tipo_match = re.search(r'Tipo[:\s]*([^\n]+)', ficha, re.IGNORECASE)
-            nome_match = re.search(r'NOME[:\s]*([^\n]+)', ficha, re.IGNORECASE)
-            cpf_match = re.search(r'CPF[:\s]*([^\n]+)', ficha, re.IGNORECASE)
-            preco_match = re.search(r'(?:Valor da Compra|Preço|Valor)[:\s]*R?\$?\s*([\d\.,]+)', ficha, re.IGNORECASE)
-            saldo_match = re.search(r'(?:Saldo mínimo garantido|Saldo|Limite)[:\s]*R?\$?\s*([\d\.,]+)', ficha, re.IGNORECASE)
 
-            if not cartao_match:
-                # Se não achou pelo rótulo, tenta pegar a primeira sequência de números de cartão válida
-                cartao_alt = re.search(r'\b(?:\d[ -]*){13,16}\b', ficha)
-                if not cartao_alt:
-                    continue
-                cartao_num = cartao_alt.group(0)
-            else:
-                cartao_num = cartao_match.group(1).strip()
+    for ficha in fichas:
+        if not ficha.strip():
+            continue
 
-            preco_val = 80.0
-            if preco_match:
-                p_str = preco_match.group(1).replace(".", "").replace(",", ".")
-                try:
-                    preco_val = float(p_str)
-                except ValueError:
-                    pass
+        bloco = "Número do Cartão:" + ficha
 
-            saldo_val = 1200.0
-            if saldo_match:
-                s_str = saldo_match.group(1).replace(".", "").replace(",", ".")
-                try:
-                    saldo_val = float(s_str)
-                except ValueError:
-                    pass
+        cartao_match = re.search(r'Número do Cartão:\s*([^\n]+)', bloco, re.IGNORECASE)
+        banco_match = re.search(r'Banco:\s*([^\n]+)', bloco, re.IGNORECASE)
+        nivel_match = re.search(r'Categoria:\s*([^\n]+)', bloco, re.IGNORECASE)
+        tipo_match = re.search(r'Tipo:\s*([^\n]+)', bloco, re.IGNORECASE)
+        nome_match = re.search(r'NOME:\s*([^\n]+)', bloco, re.IGNORECASE)
+        cpf_match = re.search(r'CPF:\s*([^\n]+)', bloco, re.IGNORECASE)
+        preco_match = re.search(r'Valor da Compra:\s*R\$\s*([\d\.,]+)', bloco, re.IGNORECASE)
+        saldo_match = re.search(r'Saldo mínimo garantido:\s*R\$\s*([\d\.,]+)', bloco, re.IGNORECASE)
 
-            dados_cartao = {
-                "cartao": cartao_num,
-                "banco": banco_match.group(1).strip() if banco_match else "N/D",
-                "categoria": nivel_match.group(1).strip() if nivel_match else "STANDARD",
-                "tipo": tipo_match.group(1).strip() if tipo_match else "Crédito",
-                "nome": nome_match.group(1).strip() if nome_match else "N/D",
-                "cpf": cpf_match.group(1).strip() if cpf_match else "N/D",
-                "preco": preco_val,
-                "limite_garantido": saldo_val,
-                "vendido": False,
-            }
+        if not cartao_match:
+            continue
 
-            db.collection("estoque").add(dados_cartao)
-            contador += 1
+        preco_val = 80.0
+        if preco_match:
+            try:
+                preco_val = float(preco_match.group(1).replace(".", "").replace(",", "."))
+            except ValueError:
+                pass
 
-        except Exception as e:
-            print(f"Erro ao processar ficha individual: {e}")
+        saldo_val = 1200.0
+        if saldo_match:
+            try:
+                saldo_val = float(saldo_match.group(1).replace(".", "").replace(",", "."))
+            except ValueError:
+                pass
+
+        dados_cartao = {
+            "cartao": cartao_match.group(1).strip(),
+            "banco": banco_match.group(1).strip() if banco_match else "N/D",
+            "categoria": nivel_match.group(1).strip() if nivel_match else "STANDARD",
+            "tipo": tipo_match.group(1).strip() if tipo_match else "Crédito",
+            "nome": nome_match.group(1).strip() if nome_match else "N/D",
+            "cpf": cpf_match.group(1).strip() if cpf_match else "N/D",
+            "preco": preco_val,
+            "limite_garantido": saldo_val,
+            "vendido": False,
+        }
+
+        db.collection("estoque").add(dados_cartao)
+        contador += 1
 
     await context.bot.edit_message_text(
         chat_id=update.effective_chat.id,
