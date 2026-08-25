@@ -10,6 +10,14 @@ from fastapi import FastAPI, Request
 import qrcode
 import httpx
 import uvicorn
+import psycopg2
+from psycopg2.extras import RealDictCursor
+# URL de conexão do PostgreSQL (Ex: Render fornece a DATABASE_URL nas variáveis de ambiente)
+DATABASE_URL = "postgresql://postgres:2103@localhost:5432/postgres"
+
+def get_db_connection():
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    return conn
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
