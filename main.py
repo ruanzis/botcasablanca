@@ -40,7 +40,6 @@ LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
 CAPA_PATH = "capa.jpg"
 
-# Link Direto extraído da sua imagem no Postimages
 THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
 MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
@@ -53,353 +52,143 @@ POLITICA_REEMBOLSO = (
     "solicite reembolso em até 20 minutos via @haridadenetwork, "
     "com vídeo mostrando cartão, valor e erro."
 )
-CATALOGO_FERRAMENTAS = [
-    {"id": "fer_klmob", "nome": "🦠 KL MOB 5.4", "descricao": "30 Dias de KL MOB 5.4", "preco": 800.00},
-    {"id": "fer_breached", "nome": "⚠️ Painel Breached", "descricao": "Painel vitalicio", "preco": 1100.00},
-    {"id": "fer_99uber", "nome": "🏍️ Painel Criar 99/Uber", "descricao": "Painel eficaz para vendas de contas da 99 Motorista e Uber Motorista. Trabalhe em case, adquira já!", "preco": 150.00},
-]
 
-SALDO_USUARIOS = {}
 SALDO_USUARIOS = {}
 CACHE_CANAL = {}
-# estoque.py
+INDICACOES_USUARIOS = {} # {user_id: referrer_id}
+TOTAL_INDICADOS = {}     # {user_id: count}
 
-estoque_novos_cartoes = [
+# --- CATÁLOGO DE FERRAMENTAS ---
+CATALOGO_FERRAMENTAS = [
     {
-        "cartao": "470598******8057",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "ROSIANE MARINHO DE CARVALHO",
-        "cpf": "49685007420",
-        "score_serasa": 129,
-        "score_bc": 542,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "62 de 520"
+        "id": "tool_kl_mob",
+        "nome": "🦠 KL MOB 5.4",
+        "descricao": "30 Dias de KL MOB 5.4",
+        "preco": 800.00
     },
     {
-        "cartao": "489391******2990",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "MAURICIO BARBOSA CHAGAS",
-        "cpf": "22638482315",
-        "score_serasa": 858,
-        "score_bc": 438,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "63 de 520"
+        "id": "tool_breached",
+        "nome": "⚠️ Painel Breached",
+        "descricao": "Painel vitalicio",
+        "preco": 1100.00
     },
     {
-        "cartao": "498401******5730",
-        "banco": "BANCO DO BRASIL, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "AUTONOMESTA BENICIO COELHO",
-        "cpf": "07795041353",
-        "score_serasa": 59,
-        "score_bc": 25,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "64 de 520"
-    },
-    {
-        "cartao": "400497******3960",
-        "banco": "BANCO LAFISE BANCENTRO",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "LUCIANO NEUMANN",
-        "cpf": "64175782087",
-        "score_serasa": None,
-        "score_bc": 200,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "65 de 520"
-    },
-    {
-        "cartao": "470598******4516",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "VIVIANE BACHMANN",
-        "cpf": "96957050904",
-        "score_serasa": None,
-        "score_bc": 862,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "66 de 520"
-    },
-    {
-        "cartao": "523431******4504",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "SILVANA APARECIDA ULBRICH",
-        "cpf": "04318683958",
-        "score_serasa": None,
-        "score_bc": 523,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "67 de 520"
-    },
-    {
-        "cartao": "470598******5916",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "LETICIA SILVA MACEDO DE SA",
-        "cpf": "76930440353",
-        "score_serasa": 141,
-        "score_bc": 96,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "68 de 520"
-    },
-    {
-        "cartao": "554906******4373",
-        "banco": "BANCO DO BRASIL, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "JOSE PEDRO PEREIRA JUNIOR",
-        "cpf": "61618837320",
-        "score_serasa": 424,
-        "score_bc": 362,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "69 de 520"
-    },
-    {
-        "cartao": "415275******4133",
-        "banco": "PORTOSEG S.A. CREDITO FINANCIAMENTO E INVESTIM...",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "HUDISON LOCH HASKEL",
-        "cpf": "05949292960",
-        "score_serasa": None,
-        "score_bc": 940,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "70 de 520"
-    },
-    {
-        "cartao": "531681******6381",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "SEBASTIAO DE SOUZA NASCIMENTO FILHO",
-        "cpf": "13153200106",
-        "score_serasa": 799,
-        "score_bc": 771,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "71 de 520"
-    },
-    {
-        "cartao": "470598******3922",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "ROZANA GOMES DO NASCIMENTO DA SILVA",
-        "cpf": "59473789149",
-        "score_serasa": 596,
-        "score_bc": 317,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "72 de 520"
-    },
-    {
-        "cartao": "422007******6782",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "CARLOS SANTANA MATHEUS",
-        "cpf": "69926824749",
-        "score_serasa": 80,
-        "score_bc": 814,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "73 de 520"
-    },
-    {
-        "cartao": "470598******7330",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "ANTONIO GOMES DA SILVA",
-        "cpf": "20902735187",
-        "score_serasa": 136,
-        "score_bc": 160,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "74 de 520"
-    },
-    {
-        "cartao": "415275******4212",
-        "banco": "PORTOSEG S.A. CREDITO FINANCIAMENTO E INVESTIM...",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "THATIANE LIMA DA SILVA BACK",
-        "cpf": "95907750200",
-        "score_serasa": 219,
-        "score_bc": 433,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "75 de 520"
-    },
-    {
-        "cartao": "514945******4408",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "STEFANNI MOURA DO NASCIMENTO",
-        "cpf": "06912570194",
-        "score_serasa": 1,
-        "score_bc": 0,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "76 de 520"
-    },
-    {
-        "cartao": "498401******0300",
-        "banco": "BANCO DO BRASIL, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "ADRIANA TOMASINI",
-        "cpf": "86252577120",
-        "score_serasa": 572,
-        "score_bc": 513,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "77 de 520"
-    },
-    {
-        "cartao": "523431******2024",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "MARIA MADALENA MANGANARO",
-        "cpf": "08306984854",
-        "score_serasa": 563,
-        "score_bc": 888,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "78 de 520"
-    },
-    {
-        "cartao": "464128******5204",
-        "banco": "BANCO BRADESCO CARTOES, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "CARLOSNAICK GONCALVES DE SOUZA",
-        "cpf": "31280862734",
-        "score_serasa": 306,
-        "score_bc": 508,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "79 de 520"
-    },
-    {
-        "cartao": "422007******3346",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "FARAH MARIA ALVIM DE SOUZA HOLANDA",
-        "cpf": "04070803416",
-        "score_serasa": 514,
-        "score_bc": 869,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "80 de 520"
-    },
-    {
-        "cartao": "414506******7584",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "FABIANA MORGAN LOPES CORDEIRO",
-        "cpf": "28818701800",
-        "score_serasa": 448,
-        "score_bc": 150,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "81 de 520"
-    },
-    {
-        "cartao": "523431******5434",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "EDUARDO MOURA ABREU BARROSO DE SIQUEIRA",
-        "cpf": "16592576898",
-        "score_serasa": 28,
-        "score_bc": 42,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "82 de 520"
-    },
-    {
-        "cartao": "422007******9711",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "FABRICIO ALMEIDA",
-        "cpf": "98693107887",
-        "score_serasa": 26,
-        "score_bc": 31,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "83 de 520"
-    },
-    {
-        "cartao": "415275******9216",
-        "banco": "PORTOSEG S.A. CREDITO FINANCIAMENTO E INVESTIM...",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "INGRID ARAMBURU TIAGO DE ALMEIDA",
-        "cpf": "05798472175",
-        "score_serasa": 234,
-        "score_bc": 306,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "84 de 520"
-    },
-    {
-        "cartao": "403002******4019",
-        "banco": "BV FINANCEIRA S.A. CREDITO FINANCIAMENTO E INV...",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "NATAN MATEUS GRZEBIELUCKAS",
-        "cpf": "04564175084",
-        "score_serasa": 1,
-        "score_bc": 653,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "85 de 520"
-    },
-    {
-        "cartao": "470598******5086",
-        "banco": "ITAU UNIBANCO, S.A.",
-        "categoria": "PLATINUM",
-        "tipo": "Crédito",
-        "nome": "JOBSON SANCHEZ GARCIA",
-        "cpf": "11662941889",
-        "score_serasa": 324,
-        "score_bc": 183,
-        "preco": "80,00",
-        "limite_garantido": 1200.00,
-        "posicao": "86 de 520"
+        "id": "tool_uber",
+        "nome": "🏍️ Painel Criar 99/Uber",
+        "descricao": "Painel eficaz para vendas de contas da 99 Motorista e Uber Motorista. Trabalhe em case, adquira já!",
+        "preco": 150.00
     }
 ]
+
+# --- CATÁLOGO DE E-SIM ---
+CATALOGO_ESIM = [
+    {
+        "id": "esim_1",
+        "nome": "TIM 30/45gb - SOBE SINAL AUTOMÁTICO",
+        "descricao": "TIM 45GB · DDD_ONLY · Conexão imediata",
+        "preco": 35.0,
+        "qtd": 51,
+        "vendido": False
+    },
+    {
+        "id": "esim_2",
+        "nome": "VIVO 110gb - SOBE SINAL AUTOMÁTICO",
+        "descricao": "VIVO CONNECT · Alta velocidade · DDD_ONLY",
+        "preco": 45.0,
+        "qtd": 65,
+        "vendido": False
+    },
+    {
+        "id": "esim_3",
+        "nome": "TIM 60gb - SOBE SINAL EM ATE 1 HORA",
+        "descricao": "TIM 60GB · Suporte dedicado",
+        "preco": 25.0,
+        "qtd": 35,
+        "vendido": False
+    }
+]
+
+# --- CATÁLOGO DE LARAS ---
+CATALOGO_LARAS = [
+    {
+        "id": "lara_1",
+        "nome": "VoltPix LTDA | CORRETORA DE SEGUROS LTDA",
+        "banco": "VOLTPIX",
+        "categoria": "CORRETORA",
+        "tipo": "BEP20",
+        "nome_titular": "CORRETORA DE SEGUROS LTDA",
+        "cpf": "38291029000155",
+        "score_serasa": 750,
+        "score_bc": 820,
+        "descricao": "VOLTPIX - 0 MED E SAQUES CRIPTO (BEP20)",
+        "preco": 120.00,
+        "vendido": False
+    },
+    {
+        "id": "lara_2",
+        "nome": "VoltPix LTDA | DISTRIBUIDORA ALIMENTÍCIOS LTDA",
+        "banco": "VOLTPIX",
+        "categoria": "DISTRIBUIDORA",
+        "tipo": "BEP20",
+        "nome_titular": "DISTRIBUIDORA ALIMENTÍCIOS LTDA",
+        "cpf": "49102938000188",
+        "score_serasa": 680,
+        "score_bc": 710,
+        "descricao": "VOLTPIX - 0 MED E SAQUES CRIPTO (BEP20)",
+        "preco": 100.00,
+        "vendido": False
+    },
+    {
+        "id": "lara_3",
+        "nome": "VoltPix LTDA | COMÉRCIO E SERVIÇOS HIDRÁULICOS",
+        "banco": "VOLTPIX",
+        "categoria": "COMÉRCIO",
+        "tipo": "BEP20",
+        "nome_titular": "COMÉRCIO E SERVIÇOS HIDRÁULICOS",
+        "cpf": "52910283000199",
+        "score_serasa": 710,
+        "score_bc": 690,
+        "descricao": "VOLTPIX - 0 MED E SAQUES CRIPTO (BEP20)",
+        "preco": 100.00,
+        "vendido": False
+    },
+    {
+        "id": "lara_4",
+        "nome": "VoltPix | Paola Amorim",
+        "banco": "VOLTPIX",
+        "categoria": "PF",
+        "tipo": "BEP20",
+        "nome_titular": "PAOLA AMORIM",
+        "cpf": "29103849200",
+        "score_serasa": 890,
+        "score_bc": 910,
+        "descricao": "VOLTPIX - 0 MED E SAQUES CRIPTO (BEP20)",
+        "preco": 100.00,
+        "vendido": False
+    },
+    {
+        "id": "lara_5",
+        "nome": "VoltPix | Erick Rosa",
+        "banco": "VOLTPIX",
+        "categoria": "PF",
+        "tipo": "BEP20",
+        "nome_titular": "ERICK ROSA",
+        "cpf": "38201928399",
+        "score_serasa": 640,
+        "score_bc": 700,
+        "descricao": "VOLTPIX - 0 MED E SAQUES CRIPTO (BEP20)",
+        "preco": 100.00,
+        "vendido": False
+    }
+]
+
 # --- MOTOR DE AUTOMAÇÃO E EDIFICAÇÃO DE ESTOQUE ---
 
 def identificar_bin(cc_number: str) -> str:
-    """Extrai exatamente os 6 primeiros dígitos numéricos do cartão."""
     apenas_numeros = re.sub(r"\D", "", str(cc_number))
     return apenas_numeros[:6] if len(apenas_numeros) >= 6 else "000000"
 
 def mascarar_cartao(cc_full: str) -> str:
-    """Mascara o cartão preservando os 6 primeiros e os 4 últimos dígitos."""
     partes = cc_full.split("|")
     num_limpo = re.sub(r"\D", "", partes[0])
     if len(num_limpo) >= 13:
@@ -414,11 +203,9 @@ def mascarar_cartao(cc_full: str) -> str:
     return num_mascarado
 
 def identificar_bandeira(bin_code: str) -> str:
-    """Identificação automatizada de bandeira por faixa de BIN."""
     b = str(bin_code).strip()
     if not b or len(b) < 6:
         return "DESCONHECIDA"
-    
     if b.startswith("4"):
         return "VISA"
     elif b.startswith(("51", "52", "53", "54", "55")) or (2221 <= int(b[:4]) <= 2720 if b[:4].isdigit() else False):
@@ -427,45 +214,24 @@ def identificar_bandeira(bin_code: str) -> str:
         return "AMEX"
     elif b.startswith(("4011", "4389", "4514", "4576", "5041", "5066", "5090", "5094", "6362", "6363", "650", "651", "655")):
         return "ELO"
-    elif b.startswith(("6011", "65")):
-        return "DISCOVER"
-    elif b.startswith(("301", "305", "36", "38")):
-        return "DINERS"
-    elif b.startswith(("3841", "6062", "6370")):
-        return "HIPERCARD"
-    elif b.startswith(("3528", "3589")):
-        return "JCB"
     else:
         return "OUTRAS"
 
 def identificar_banco_por_bin(bin_code: str) -> str:
-    """Reconhecimento automatizado do Banco Emissor através do BIN."""
     b = str(bin_code).strip()
     if b.startswith(("470598", "544169", "498406", "525204", "410863", "412171")):
         return "ITAU UNIBANCO, S.A."
     elif b.startswith(("542819", "548058")):
         return "BANCO GENIAL SA"
-    elif b.startswith(("509423", "603689")):
-        return "PLUXEE INSTITUICAO DE PAGAMENTO BRASIL SA"
     elif b.startswith(("400217", "427168", "512631", "520268")):
         return "BANCO BRADESCO S.A."
     elif b.startswith(("451416", "540115", "490172")):
         return "BANCO DO BRASIL S.A."
-    elif b.startswith(("516292", "550209", "522774")):
-        return "BANCO SANTANDER BRASIL S.A."
-    elif b.startswith(("518029", "516220")):
-        return "NUBANK - NUPAGAMENTOS S.A."
-    elif b.startswith(("506722", "506723", "506724")):
-        return "BANCO INTER S.A."
-    elif b.startswith(("104", "204", "506728")):
-        return "CAIXA ECONOMICA FEDERAL"
     else:
         return "BANCO DESCONHECIDO"
 
 def identificar_nivel(categoria_raw: str) -> str:
-    """Padronização limpa de Categoria/Nível."""
     cat = str(categoria_raw).upper().strip()
-    
     if "BLACK" in cat:
         return "BLACK"
     elif "INFINITE" in cat:
@@ -474,30 +240,14 @@ def identificar_nivel(categoria_raw: str) -> str:
         return "PLATINUM"
     elif "GOLD" in cat or "OURO" in cat:
         return "GOLD"
-    elif "SIGNATURE" in cat:
-        return "SIGNATURE"
-    elif "PREPAID" in cat or "VOUCHER" in cat:
-        return "PREPAID"
-    elif "BUSINESS" in cat or "CORPORATE" in cat:
-        return "BUSINESS"
-    elif "STANDARD" in cat or "CLASSIC" in cat:
-        return "STANDARD"
     else:
         return cat if cat else "STANDARD"
 
 def edificar_item_estoque(card_raw: dict) -> dict:
-    """Reconhece, calcula e edifica todos os campos do cartão no estoque."""
     cc_bruto = card_raw.get("cc", "")
     bin_extraida = identificar_bin(cc_bruto)
-    
-    banco_auto = card_raw.get("banco")
-    if not banco_auto or banco_auto == "DESCONHECIDO":
-        banco_auto = identificar_banco_por_bin(bin_extraida)
-
-    bandeira_auto = card_raw.get("bandeira")
-    if not bandeira_auto:
-        bandeira_auto = identificar_bandeira(bin_extraida)
-
+    banco_auto = card_raw.get("banco", identificar_banco_por_bin(bin_extraida))
+    bandeira_auto = card_raw.get("bandeira", identificar_bandeira(bin_extraida))
     nivel_auto = identificar_nivel(card_raw.get("categoria", ""))
 
     return {
@@ -512,11 +262,14 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "tipo": card_raw.get("tipo", "CREDIT").upper(),
         "nome": card_raw.get("nome", "NÃO INFORMADO").upper(),
         "cpf": re.sub(r"\D", "", str(card_raw.get("cpf", ""))),
+        "score_serasa": card_raw.get("score_serasa", random.randint(100, 900)),
+        "score_bc": card_raw.get("score_bc", random.randint(100, 900)),
         "fornecedor": card_raw.get("fornecedor", "Anon"),
         "preco": float(card_raw.get("preco", 80.0)),
         "saldo_minimo": float(card_raw.get("saldo_minimo", 1200.0)),
         "vendido": card_raw.get("vendido", False),
     }
+
 ESTOQUE_BRUTO = [
     {
         "id": "card_1",
@@ -525,6 +278,8 @@ ESTOQUE_BRUTO = [
         "tipo": "CREDIT",
         "nome": "CRISTIANO CACHEIRO MAHIA",
         "cpf": "03250698679",
+        "score_serasa": 496,
+        "score_bc": 352,
         "fornecedor": "Anon",
         "preco": 80.00,
         "saldo_minimo": 1200.00,
@@ -537,30 +292,8 @@ ESTOQUE_BRUTO = [
         "tipo": "CREDIT",
         "nome": "ALEXANDRE CARVALHO CHANAN",
         "cpf": "18319050006",
-        "fornecedor": "Anon",
-        "preco": 80.00,
-        "saldo_minimo": 1200.00,
-        "vendido": False,
-    },
-    {
-        "id": "card_3",
-        "cc": "509423******7847",
-        "categoria": "PREPAID MULTIPLE VOUCHER",
-        "tipo": "DEBIT",
-        "nome": "DANIELE SILVA DE OLIVEIRA",
-        "cpf": "09078890690",
-        "fornecedor": "Anon",
-        "preco": 50.00,
-        "saldo_minimo": 500.00,
-        "vendido": False,
-    },
-    {
-        "id": "card_4",
-        "cc": "470598******5141",
-        "categoria": "PLATINUM",
-        "tipo": "CREDIT",
-        "nome": "ALESSANDRO FERNANDES GOMES PEREIRA",
-        "cpf": "11257194780",
+        "score_serasa": 712,
+        "score_bc": 540,
         "fornecedor": "Anon",
         "preco": 80.00,
         "saldo_minimo": 1200.00,
@@ -575,65 +308,8 @@ CATALOGO_UNITARIAS = [
     {"id": "unit_1", "nome": "PERSONAL", "preco": 50.0, "qtd": 55},
     {"id": "unit_2", "nome": "GOLD", "preco": 50.0, "qtd": 174},
     {"id": "unit_3", "nome": "ELO", "preco": 50.0, "qtd": 1},
-    {"id": "unit_4", "nome": "BUSINESS", "preco": 80.0, "qtd": 16},
-    {"id": "unit_5", "nome": "INFINITE", "preco": 413, "qtd": 413},
-    {"id": "unit_6", "nome": "BLACK", "preco": 120.0, "qtd": 114},
-    {"id": "unit_7", "nome": "SIGNATURE", "preco": 80.0, "qtd": 3},
-    {"id": "unit_8", "nome": "NUBANK GOLD", "preco": 35.0, "qtd": 501},
-    {"id": "unit_9", "nome": "NUBANK PLATINUM", "preco": 40.0, "qtd": 430},
-]
-# ==============================================================================
-# NOVAS VARIÁVEIS DE ESTOQUE E COMANDOS ADMINISTRATIVOS
-# ==============================================================================
-
-ESTOQUE_ESIM_DINAMICO = [
-    "📶 <b>TIM 30/45gb - SOBE SINAL AUTOMÁTICO</b>\n💰 R$35 · TIM 45GB · DDD_ONLY · 51 em estoque\n",
-    "📶 <b>VIVO 110gb - SOBE SINAL AUTOMÁTICO</b>\n💰 R$45 · VIVO CONNECT · DDD_ONLY · 65 em estoque\n",
-    "📶 <b>TIM 60gb - SOBE SINAL EM ATE 1 HORAS</b>\n💰 R$25 · TIM 60GB · DDD_ONLY · 35 em estoque\n"
 ]
 
-ESTOQUE_LARAS_DINAMICO = []
-
-async def painel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in [7536040475]: return
-    
-    texto = (
-        "👨‍💻 <b>PAINEL ADMINISTRATIVO COMPLETO</b>\n\n"
-        "<b>Comandos de Inserção de Estoque:</b>\n"
-        "<code>/add_estoque_ccfullldados</code> - Add CC Full\n"
-        "<code>/add_estoque_esim</code> - Add E-SIM\n"
-        "<code>/add_estoque_laras</code> - Add Laras\n"
-        "<code>/add_estoque_consultavel</code> - Add Consultável\n\n"
-        "<i>Envie o comando acompanhado das informações do produto para catalogá-lo.</i>"
-    )
-    await update.message.reply_text(texto, parse_mode="HTML")
-
-async def add_estoque_esim(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in [7536040475]: return
-    
-    texto = update.message.text.replace("/add_estoque_esim", "").strip()
-    if not texto:
-        return await update.message.reply_text("❌ Envie o formato do E-SIM após o comando.\nEx: /add_estoque_esim 📶 TIM 60GB...")
-    
-    ESTOQUE_ESIM_DINAMICO.append(texto + "\n")
-    await update.message.reply_text("✅ <b>E-SIM adicionado com sucesso ao catálogo!</b>", parse_mode="HTML")
-
-async def add_estoque_laras(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in [7536040475]: return
-    await update.message.reply_text("✅ <b>Laras recebido e adicionado com sucesso ao catálogo dinâmico!</b>", parse_mode="HTML")
-
-async def add_estoque_ccfullldados(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Reaproveita exatamente a sua lógica existente de CC Full
-    await add_estoque(update, context)
-
-async def add_estoque_consultavel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in [7536040475]: return
-    await update.message.reply_text("✅ <b>Consultável estocado com sucesso! (Ficará visível assim que o módulo for ativado)</b>", parse_mode="HTML")
-    
 telegram_app = Application.builder().token(TOKEN).build()
 
 def gerar_cpf_valido() -> str:
@@ -707,9 +383,7 @@ async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
         if no_canal:
             CACHE_CANAL[user_id] = agora
         return no_canal
-    except Exception as e:
-        print(f"Erro ao verificar canal: {e}")
-        # Retorna False para forçar o usuário a entrar ou para você ver o erro nos logs do Render
+    except Exception:
         return False
 
 async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE, reply_to_id: int = None):
@@ -764,6 +438,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     msg_id = update.message.message_id
     
+    # Processar Indicação se houver argumento no start
+    if context.args:
+        try:
+            referrer_id = int(context.args[0])
+            if referrer_id != user_id and user_id not in INDICACOES_USUARIOS:
+                INDICACOES_USUARIOS[user_id] = referrer_id
+                TOTAL_INDICADOS[referrer_id] = TOTAL_INDICADOS.get(referrer_id, 0) + 1
+        except ValueError:
+            pass
+
     if await esta_no_canal(context, user_id):
         await enviar_menu_principal(update, context, reply_to_id=msg_id)
     else:
@@ -805,14 +489,12 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if dados_pix and "pix_code" in dados_pix:
         pix_code = dados_pix["pix_code"]
-        
         qr_img = qrcode.make(pix_code)
         img_buffer = io.BytesIO()
         qr_img.save(img_buffer, format="PNG")
         img_buffer.seek(0)
 
         valor_formatado = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
         msg = (
             f"🔹 <b>CASABLANCA SHOP | PAGAMENTO VIA PIX</b> 🔹\n\n"
             f"💰 <b>Valor:</b> R$ {valor_formatado}\n"
@@ -866,27 +548,18 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query.strip().lower()
     results = []
 
-    cartoes_filtrados = []
-    for c in DADOS_CARTOES:
-        if c["vendido"]:
-            continue
-        if not query or (
-            query in c["bin"].lower() or 
-            query in c["banco"].lower() or 
-            query in c["categoria"].lower() or 
-            query in c["nivel_formatado"].lower() or
-            query in c["bandeira"].lower()
-        ):
-            cartoes_filtrados.append(c)
+    cartoes_filtrados = [c for c in DADOS_CARTOES if not c["vendido"] and (not query or query in c["bin"].lower() or query in c["banco"].lower() or query in c["nivel_formatado"].lower())]
 
     for item in cartoes_filtrados:
         texto_resposta = (
-            f"Número do Cartão: {item['cc_mascarado']}\n"
+            f"Número do Cartão: <code>{item['cc_mascarado']}</code>\n"
             f"Banco: {item['banco']}\n"
             f"Categoria: {item['categoria']}\n"
             f"Tipo: {item['tipo']}\n"
-            f"NOME: {item['nome']}\n"
-            f"CPF: {item['cpf']}\n\n"
+            f"Nome: <code>{item['nome']}</code>\n"
+            f"CPF: <code>{item['cpf']}</code>\n"
+            f"Score Serasa: <code>{item['score_serasa']}</code>\n"
+            f"Score BC: <code>{item['score_bc']}</code>\n\n"
             f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:,.2f}</b>\n"
             f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a <b>Política de Reembolso</b>.\n\n"
             f"Valor da Compra: R$ {item['preco']:,.2f}\n\n"
@@ -895,10 +568,6 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [
             [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{item['id']}")],
-            [
-                InlineKeyboardButton("⬅️ Anterior", callback_data="nav_prev"),
-                InlineKeyboardButton("Próximo ➡️", callback_data="nav_next"),
-            ],
             [InlineKeyboardButton("❌ Cancelar", callback_data="voltar_cc_full")],
         ]
 
@@ -906,7 +575,7 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineQueryResultArticle(
                 id=item["id"],
                 title=f"R$ {item['preco']:.2f} - BIN {item['bin']} - {item['banco']}",
-                description=f"Nível: {item['nivel_formatado']} | Bandeira: {item['bandeira']}\nFornecedor: {item['fornecedor']}",
+                description=f"Nível: {item['nivel_formatado']} | Fornecedor: {item['fornecedor']}",
                 thumbnail_url=THUMB_CARD_URL,
                 input_message_content=InputTextMessageContent(texto_resposta, parse_mode="HTML"),
                 reply_markup=InlineKeyboardMarkup(keyboard),
@@ -916,21 +585,20 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.inline_query.answer(results, cache_time=1)
 
 def montar_texto_cartao_unitario(item: dict) -> str:
-    """Monta a exibição pré-compra idêntica à imagem 3 do cliente."""
     return (
         f"Número do Cartão: <code>{item['cc_mascarado']}</code>\n"
         f"Banco: {item['banco']}\n"
         f"Categoria: {item['categoria']}\n"
-        f"Tipo: Crédito\n"
+        f"Tipo: {item['tipo']}\n"
         f"Nome: <code>{item['nome']}</code>\n"
         f"CPF: <code>{item['cpf']}</code>\n"
-        f"Score Serasa: <code>{item.get('score_serasa', 'N/A')}</code>\n"
-        f"Score BC: <code>{item.get('score_bc', 'N/A')}</code>\n\n"
-        f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:.2f}</b>\n"
+        f"Score Serasa: <code>{item['score_serasa']}</code>\n"
+        f"Score BC: <code>{item['score_bc']}</code>\n\n"
+        f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:,.2f}</b>\n"
         f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a <b>Política de Reembolso</b>.\n\n"
-        f"Valor da Compra: R$ {item['preco']:.2f}\n"
+        f"Valor da Compra: R$ {item['preco']:,.2f}\n\n"
         f"Fornecedor: <i>{item['fornecedor']}</i>"
-    ).replace(",", ".").replace("X", ".").replace("x", ".")
+    ).replace(",", "X").replace(".", ",").replace("X", ".")
 
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -942,124 +610,16 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     data = query.data
     chat_id = query.message.chat_id
-
     saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
 
-
-    # === NOVOS MENUS E FERRAMENTAS ===
-    saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
-
-    # O primeiro bloco DEVE começar com IF
-    if data in ["menu_esim", "menu_laras", "menu_ferramentas"]:
-        keyboard = []
-        
-        if data == "menu_ferramentas":
-            texto = (
-                "🔹 <b>CasaBlanca • Ferramentas</b> 🔹\n\n"
-                "🎓 Funcionalidades de ferramentas, com pronta-entrega & suporte para entrega solidária em @haridadenetwork\n\n"
-                "Selecione abaixo sua ferramenta desejada:"
-            )
-            for item in CATALOGO_FERRAMENTAS:
-                keyboard.append([InlineKeyboardButton(f"{item['nome']}", callback_data=f"info_{item['id']}")])
-        else:
-            if data == "menu_esim":
-                lista_atual = CATALOGO_ESIM
-                titulo = "E-SIM"
-            else:
-                lista_atual = CATALOGO_LARAS
-                titulo = "LARAS"
-                
-            texto = f"🛍 <b>Produtos em VOLTPIX - O MED E SAQUES CRIPTO (BEP20):</b>\n\nSelecione um produto da categoria {titulo}:"
-            for item in lista_atual:
-                if item.get("qtd", 1) > 0:
-                    keyboard.append([InlineKeyboardButton(f"{item['nome']} - R$ {item['preco']:.2f} ({item['qtd']})", callback_data=f"info_{item['id']}")])
-        
-        keyboard.append([InlineKeyboardButton("⬅️ Voltar para Categorias", callback_data="voltar_inicio")])
-        await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-    elif data.startswith("info_"):
-        item_id = data.split("_", 1)[1]
-        item = next((i for i in CATALOGO_FERRAMENTAS + CATALOGO_ESIM + CATALOGO_LARAS if i["id"] == item_id), None)
-        
-        if not item:
-            return await query.answer("❌ Produto indisponível.", show_alert=True)
-            
-        desc = f"\nDescrição: {item['descricao']}" if "descricao" in item else ""
-        qtd = f"\nQuantidade em estoque: {item['qtd']}" if "qtd" in item else ""
-        
-        texto_info = (
-            f"🛒 <b>Confirmar Compra</b>\n\n"
-            f"Produto: <b>{item['nome']}</b>{desc}\n"
-            f"Valor: R$ {item['preco']:.2f}{qtd}\n\n"
-            f"Deseja finalizar a compra usando seu saldo?"
-        )
-        keyboard = [
-            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_{item['id']}")],
-            [InlineKeyboardButton("⬅️ Anterior", callback_data="voltar_inicio"),
-             InlineKeyboardButton("Próximo ➡️", callback_data="voltar_inicio")]
-        ]
-        await query.message.edit_text(texto_info, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-    elif data == "menu_perfil":
-        user_id = update.effective_user.id
-        nome = update.effective_user.first_name
-        saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
-        
-        texto_perfil = (
-            f"<b>{nome}</b> ❗️\n"
-            f"/menu\n"
-            f"👤 <b>Perfil</b>\n"
-            f"- Nome: <i>{nome}</i> ❗️\n"
-            f"- Id: <code>{user_id}</code>\n\n"
-            f"💰 <b>Carteira</b>\n"
-            f"- Saldo: R$ {saldo_atual:.2f}\n"
-            f"- Compras: 0"
-        )
-        keyboard = [
-            [InlineKeyboardButton("🟢 Adicionar saldo", callback_data="add_saldo"),
-             InlineKeyboardButton("📄 Histórico", callback_data="historico_compras")],
-            [InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")]
-        ]
-        await query.message.edit_text(texto_perfil, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-    elif data == "menu_indicacao":
-        user_id = update.effective_user.id
-        nome = update.effective_user.first_name
-        bot_username = (await context.bot.get_me()).username
-        link_indicacao = f"https://t.me/{bot_username}?start={user_id}"
-        
-        texto_ind = (
-            f"<b>{nome}</b> ❗️\n"
-            f"/menu\n"
-            f"🚀 <b>Sistema de Indicação</b>\n\n"
-            f"Compartilhe seu link e ganhe quando um indicado fizer a primeira recarga.\n\n"
-            f"💰 Você escolhe como receber:\n\n"
-            f"• 50% se converter em saldo no bot\n"
-            f"• 30% se receber via Pix\n\n"
-            f"📊 <b>Suas informações:</b>\n\n"
-            f"• Seu indicador: Não indicado.\n"
-            f"• Seus Indicados: 0\n\n"
-            f"💵 <b>Disponível agora:</b>\n"
-            f"• Para saldo no bot: R$ 0,00\n"
-            f"• Para receber via Pix: R$ 0,00\n\n"
-            f"Use os botões abaixo para ver seu link, converter em saldo ou receber via Pix."
-        )
-        keyboard = [
-            [InlineKeyboardButton("🔗 Meu link", url=link_indicacao)],
-            [InlineKeyboardButton("💰 Receber via Pix", callback_data="saque_pix"),
-             InlineKeyboardButton("🔄 Converter em saldo", callback_data="converter_saldo")],
-            [InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")]
-        ]
-        await query.message.edit_text(texto_ind, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
-
-    # O antigo "if data == 'verificacao':" agora vira ELIF porque já temos um IF acima dele!
-    elif data == "verificacao":
+    if data == "verificar":
         CACHE_CANAL.pop(user_id, None)
         if await esta_no_canal(context, user_id):
             await query.message.delete()
             await enviar_menu_principal(update, context)
         else:
             await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Você ainda não entrou no canal!", parse_mode="HTML")
+
     elif data == "add_saldo":
         await query.message.reply_text(
             "🔹 <b>CASABLANCA SHOP | ADICIONAR SALDO</b> 🔹\n\n"
@@ -1088,14 +648,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "voltar_cc_full":
         keyboard = [
             [InlineKeyboardButton("🔢 Unitárias", callback_data="ver_unitarias")],
-            [
-                InlineKeyboardButton("📊 Nível", switch_inline_query_current_chat=""),
-                InlineKeyboardButton("🔍 Bin", switch_inline_query_current_chat=""),
-            ],
-            [
-                InlineKeyboardButton("🏦 Banco", switch_inline_query_current_chat=""),
-                InlineKeyboardButton("🇧🇷 Bandeira", switch_inline_query_current_chat=""),
-            ],
+            [InlineKeyboardButton("📊 Pesquisar por Nível / BIN / Banco", switch_inline_query_current_chat="")],
             [InlineKeyboardButton("💬 Atendimento/suporte", url=LINK_SUPORTE)],
             [InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")],
         ]
@@ -1112,84 +665,33 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = []
         for item in CATALOGO_UNITARIAS:
             keyboard.append([InlineKeyboardButton(f"R$ {item['preco']:.0f} {item['nome']} ({item['qtd']})", callback_data=f"show_u_{item['id']}")])
-
         keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="voltar_cc_full")])
         await query.message.edit_text(POLITICA_REEMBOLSO, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
     elif data.startswith("show_u_"):
         unit_id = data.replace("show_u_", "")
         cartoes_validos = [c for c in DADOS_CARTOES if not c["vendido"]]
-        
         if not cartoes_validos:
-            await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Estoque temporariamente esgotado para esta categoria!", parse_mode="HTML")
+            await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Estoque temporariamente esgotado!", parse_mode="HTML")
             return
-
-        idx = 0
-        card = cartoes_validos[idx]
+        card = cartoes_validos[0]
         texto_card = montar_texto_cartao_unitario(card)
-
         keyboard = [
             [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{card['id']}")],
-            [
-                InlineKeyboardButton("⬅️ Anterior", callback_data=f"u_nav_{unit_id}_{idx - 1}"),
-                InlineKeyboardButton("Próximo ➡️", callback_data=f"u_nav_{unit_id}_{idx + 1}"),
-            ],
             [InlineKeyboardButton("❌ Cancelar", callback_data="ver_unitarias")],
         ]
-
         await query.message.edit_text(texto_card, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-    elif data.startswith("u_nav_"):
-        partes = data.split("_")
-        unit_id = partes[2]
-        idx = int(partes[3])
-
-        cartoes_validos = [c for c in DADOS_CARTOES if not c["vendido"]]
-        if not cartoes_validos:
-            await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Estoque esgotado!", parse_mode="HTML")
-            return
-
-        idx = idx % len(cartoes_validos)
-        card = cartoes_validos[idx]
-        texto_card = montar_texto_cartao_unitario(card)
-
-        keyboard = [
-            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{card['id']}")],
-            [
-                InlineKeyboardButton("⬅️ Anterior", callback_data=f"u_nav_{unit_id}_{idx - 1}"),
-                InlineKeyboardButton("Próximo ➡️", callback_data=f"u_nav_{unit_id}_{idx + 1}"),
-            ],
-            [InlineKeyboardButton("❌ Cancelar", callback_data="ver_unitarias")],
-        ]
-
-        await query.message.edit_text(texto_card, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-    elif data == "nav_prev" or data == "nav_next":
-        cartoes_validos = [c for c in DADOS_CARTOES if not c["vendido"]]
-        if cartoes_validos:
-            card = random.choice(cartoes_validos)
-            texto_card = montar_texto_cartao_unitario(card)
-            keyboard = [
-                [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{card['id']}")],
-                [
-                    InlineKeyboardButton("⬅️ Anterior", callback_data="nav_prev"),
-                    InlineKeyboardButton("Próximo ➡️", callback_data="nav_next"),
-                ],
-                [InlineKeyboardButton("❌ Cancelar", callback_data="voltar_cc_full")],
-            ]
-            await query.message.edit_text(texto_card, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
     elif data.startswith("buy_card_"):
         card_id = data.replace("buy_card_", "")
         card = next((c for c in DADOS_CARTOES if c["id"] == card_id), None)
         if card:
             if card["vendido"]:
-                await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Este cartão já foi vendido!", parse_mode="HTML")
+                await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Este item já foi vendido!", parse_mode="HTML")
             elif saldo_atual < card["preco"]:
                 await query.message.reply_text(
                     f"🔹 <b>CASABLANCA SHOP | SALDO INSUFICIENTE</b> 🔹\n\n"
-                    f"Preço do cartão: R$ {card['preco']:,.2f}\n"
-                    f"Seu Saldo: R$ {saldo_atual:,.2f}\n\n"
+                    f"Preço: R$ {card['preco']:,.2f}\nSeu Saldo: R$ {saldo_atual:,.2f}\n\n"
                     f"Adicione saldo digitando: <code>/pix {int(card['preco'])}</code>",
                     parse_mode="HTML",
                 )
@@ -1198,15 +700,204 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 card["vendido"] = True
                 await query.message.reply_text(
                     f"🎉 <b>COMPRA CONCLUÍDA - CASABLANCA SHOP</b>\n\n"
-                    f"<b>Dados do Cartão:</b>\n<code>{card['cc_full']}</code>\n"
-                    f"<b>Nome:</b> {card['nome']}\n"
-                    f"<b>CPF:</b> {card['cpf']}\n"
-                    f"<b>Banco:</b> {card['banco']}\n"
-                    f"<b>Nível:</b> {card['nivel_formatado']}\n"
-                    f"<b>Bandeira:</b> {card['bandeira']}\n\n"
+                    f"<b>Dados:</b>\n<code>{card['cc_full']}</code>\n"
+                    f"<b>Nome:</b> <code>{card['nome']}</code>\n"
+                    f"<b>CPF:</b> <code>{card['cpf']}</code>\n"
+                    f"<b>Score Serasa:</b> <code>{card['score_serasa']}</code>\n"
+                    f"<b>Score BC:</b> <code>{card['score_bc']}</code>\n\n"
                     f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
                     parse_mode="HTML",
                 )
+
+    # --- FUNCIONALIDADE 2: BOTÃO INFORMAÇÕES (PERFIL DA IMAGEM 3) ---
+    elif data == "info":
+        nome_usuario = query.from_user.first_name or "Cliente"
+        texto_perfil = (
+            f"<b>{nome_usuario}</b> ❗️\n"
+            f"/menu\n"
+            f"👤 <b>Perfil</b>\n"
+            f"- Nome: <i>{nome_usuario}</i> ❗️\n"
+            f"- Id: <code>{user_id}</code>\n\n"
+            f"💰 <b>Carteira</b>\n"
+            f"- Saldo: R$ {saldo_atual:,.2f}\n"
+            f"- Compras: 0"
+        ).replace(",", "X").replace(".", ",").replace("X", ".")
+        keyboard = [
+            [InlineKeyboardButton("🟢 Adicionar saldo", callback_data="add_saldo"),
+             InlineKeyboardButton("📄 Histórico", callback_data="sem_saldo_aviso")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")]
+        ]
+        await query.message.edit_text(texto_perfil, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # --- FUNCIONALIDADE 2: BOTÃO INDICAÇÕES (SISTEMA DA IMAGEM 4) ---
+    elif data == "indicacoes":
+        bot_username = (await context.bot.get_me()).username
+        link_indicacao = f"https://t.me/{bot_username}?start={user_id}"
+        indicador_id = INDICACOES_USUARIOS.get(user_id)
+        indicador_txt = f"<code>{indicador_id}</code>" if indicador_id else "Não indicado."
+        qtd_indicados = TOTAL_INDICADOS.get(user_id, 0)
+        ganho_indicacao = qtd_indicados * 1.00 # R$ 1,00 por indicado que depositou
+
+        texto_ind = (
+            f"<b>{query.from_user.first_name}</b> ❗️\n"
+            f"/menu\n"
+            f"🚀 <b>Sistema de Indicação</b>\n\n"
+            f"Compartilhe seu link e ganhe R$ 1,00 de saldo quando um indicado fizer um depósito.\n\n"
+            f"📊 <b>Suas informações:</b>\n\n"
+            f"• Seu indicador: {indicador_txt}\n"
+            f"• Seus Indicados: {qtd_indicados}\n\n"
+            f"💵 <b>Disponível agora:</b>\n"
+            f"• Para saldo no bot: R$ {ganho_indicacao:,.2f}\n"
+            f"• Para receber via Pix: R$ 0,00\n\n"
+            f"Use os botões abaixo para ver seu link ou converter bônus."
+        ).replace(",", "X").replace(".", ",").replace("X", ".")
+        keyboard = [
+            [InlineKeyboardButton("🔗 Meu link", url=link_indicacao)],
+            [InlineKeyboardButton("💰 Receber via Pix", callback_data="sem_saldo_aviso"),
+             InlineKeyboardButton("🔄 Converter em saldo", callback_data="converter_saldo")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")]
+        ]
+        await query.message.edit_text(texto_ind, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+
+    elif data == "converter_saldo":
+        qtd_indicados = TOTAL_INDICADOS.get(user_id, 0)
+        bonus = float(qtd_indicados * 1.0)
+        if bonus > 0:
+            TOTAL_INDICADOS[user_id] = 0
+            SALDO_USUARIOS[user_id] = SALDO_USUARIOS.get(user_id, 0.0) + bonus
+            await query.answer(f"✅ Convertido R$ {bonus:.2f} para o seu saldo!", show_alert=True)
+        else:
+            await query.answer("❌ Você não possui bônus de indicação disponíveis para converter.", show_alert=True)
+
+    # --- FUNCIONALIDADE 2: BOTÃO FERRAMENTAS (LAYOUT DA IMAGEM 5) ---
+    elif data == "ferramentas":
+        keyboard = []
+        for ferramenta in CATALOGO_FERRAMENTAS:
+            keyboard.append([InlineKeyboardButton(ferramenta["nome"], callback_data=f"tool_info_{ferramenta['id']}")])
+        keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")])
+
+        texto = (
+            "🔹 <b>CasaBlanca • Ferramentas</b> 🔹\n\n"
+            "🎓 Funcionalidades de ferramentas, com pronta-entrega & suporte para entrega solidária em @haridadenetwork\n\n"
+            "Selecione abaixo sua ferramenta desejada:"
+        )
+        if query.message.photo:
+            await query.message.delete()
+            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        else:
+            await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("tool_info_"):
+        t_id = data.replace("tool_info_", "")
+        ferramenta = next((f for f in CATALOGO_FERRAMENTAS if f["id"] == t_id), None)
+        if not ferramenta:
+            return await query.answer("❌ Ferramenta não encontrada.", show_alert=True)
+
+        texto_tool = (
+            f"🛠 <b>FERRAMENTA | {ferramenta['nome']}</b>\n\n"
+            f"ℹ️ <b>Descrição:</b> {ferramenta['descricao']}\n"
+            f"💵 <b>Valor:</b> R$ {ferramenta['preco']:,.2f}\n\n"
+            f"Seu saldo atual: R$ {saldo_atual:,.2f}"
+        ).replace(",", "X").replace(".", ",").replace("X", ".")
+
+        keyboard = [
+            [InlineKeyboardButton("✅ Comprar Ferramenta", callback_data=f"buy_tool_{ferramenta['id']}")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="ferramentas")]
+        ]
+        await query.message.edit_text(texto_tool, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("buy_tool_"):
+        t_id = data.replace("buy_tool_", "")
+        ferramenta = next((f for f in CATALOGO_FERRAMENTAS if f["id"] == t_id), None)
+        if ferramenta:
+            if saldo_atual < ferramenta["preco"]:
+                await query.answer("❌ Saldo insuficiente para adquirir esta ferramenta!", show_alert=True)
+            else:
+                SALDO_USUARIOS[user_id] -= ferramenta["preco"]
+                await query.message.edit_text(
+                    f"🎉 <b>COMPRA DE FERRAMENTA APROVADA!</b>\n\n"
+                    f"Ferramenta: <b>{ferramenta['nome']}</b>\n"
+                    f"Descrição: {ferramenta['descricao']}\n\n"
+                    f"Suporte e entrega imediata via {LINK_SUPORTE}\n\n"
+                    f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar ao Início", callback_data="voltar_inicio")]])
+                )
+
+    # --- CORREÇÃO BUG 1 & 2: E-SIM E LARAS COM BOTÕES INLINE E COMPRA CORRETA ---
+    elif data == "esim":
+        keyboard = []
+        for item in CATALOGO_ESIM:
+            keyboard.append([InlineKeyboardButton(f"{item['nome']} - R$ {item['preco']:.2f} ({item['qtd']})", callback_data=f"buy_esim_{item['id']}")])
+        keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")])
+        
+        texto = "📱 <b>CATÁLOGO DE E-SIM</b>\n\nSelecione um produto abaixo para comprar instantaneamente:"
+        if query.message.photo:
+            await query.message.delete()
+            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        else:
+            await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("buy_esim_"):
+        esim_id = data.replace("buy_esim_", "")
+        item = next((e for e in CATALOGO_ESIM if e["id"] == esim_id), None)
+        if item:
+            if item["qtd"] <= 0:
+                await query.answer("❌ Estoque esgotado!", show_alert=True)
+            elif saldo_atual < item["preco"]:
+                await query.answer("❌ Saldo insuficiente!", show_alert=True)
+            else:
+                SALDO_USUARIOS[user_id] -= item["preco"]
+                item["qtd"] -= 1
+                await query.message.edit_text(
+                    f"🎉 <b>E-SIM ADQUIRIDO COM SUCESSO!</b>\n\n"
+                    f"Produto: <b>{item['nome']}</b>\n"
+                    f"Detalhes: {item['descricao']}\n"
+                    f"Valor: R$ {item['preco']:.2f}\n\n"
+                    f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar", callback_data="esim")]])
+                )
+
+    elif data == "laras":
+        keyboard = []
+        for item in CATALOGO_LARAS:
+            keyboard.append([InlineKeyboardButton(f"📁 {item['nome']} - R$ {item['preco']:.2f}", callback_data=f"buy_lara_{item['id']}")])
+        keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")])
+        
+        texto = "🛡️ <b>CATÁLOGO DE LARAS</b>\n\nSelecione o produto desejado:"
+        if query.message.photo:
+            await query.message.delete()
+            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        else:
+            await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("buy_lara_"):
+        lara_id = data.replace("buy_lara_", "")
+        item = next((l for l in CATALOGO_LARAS if l["id"] == lara_id), None)
+        if item:
+            if item["vendido"]:
+                await query.answer("❌ Este item já foi vendido!", show_alert=True)
+            elif saldo_atual < item["preco"]:
+                await query.answer("❌ Saldo insuficiente!", show_alert=True)
+            else:
+                SALDO_USUARIOS[user_id] -= item["preco"]
+                item["vendido"] = True
+                await query.message.edit_text(
+                    f"🎉 <b>LARA ADQUIRIDA COM SUCESSO!</b>\n\n"
+                    f"Banco: {item['banco']}\n"
+                    f"Titular: <code>{item['nome_titular']}</code>\n"
+                    f"CPF: <code>{item['cpf']}</code>\n"
+                    f"Score Serasa: <code>{item['score_serasa']}</code>\n"
+                    f"Score BC: <code>{item['score_bc']}</code>\n"
+                    f"Gateway: {item['descricao']}\n\n"
+                    f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar", callback_data="laras")]])
+                )
+
+    elif data == "sem_saldo_aviso":
+        await query.answer("❌ Funcionalidade em manutenção / Sem saldo ou histórico no momento.", show_alert=True)
 
     elif data == "voltar_inicio":
         try:
@@ -1215,201 +906,12 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await enviar_menu_principal(update, context)
 
-# ==============================================================================
-    # 👇 NOVAS IMPLEMENTAÇÕES DE CATÁLOGOS - INJETADAS AQUI 👇
-    # ==============================================================================
-    elif data in ["logins", "consultavel", "cc_auxiliar"]:
-        await query.answer("❌ Não há estoques disponíveis no momento.", show_alert=True)
-        
-    elif data == "esim":
-        keyboard = [
-            [InlineKeyboardButton("Escolher DDD · TIM 30/45gb", callback_data="sem_saldo_aviso")],
-            [InlineKeyboardButton("Escolher DDD · VIVO 110gb", callback_data="sem_saldo_aviso")],
-            [InlineKeyboardButton("Escolher DDD · TIM 60gb", callback_data="sem_saldo_aviso")],
-            [InlineKeyboardButton("◀️ Voltar ao menu", callback_data="menu_comprar")]
-        ]
-        
-        texto = "📦 <b>Prateleira</b>\n\n"
-        for item in ESTOQUE_ESIM_DINAMICO:
-            texto += f"{item}\n"
-            
-        if query.message.photo:
-            await query.message.delete()
-            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-        else:
-            await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-    elif data == "laras":
-        keyboard = [
-            [InlineKeyboardButton("📁 MERCADO PAGO LTDA (1)", callback_data="laras_1")],
-            [InlineKeyboardButton("📁 MAGIE - FEITA NO SEU WHATSAPP (1)", callback_data="laras_2")],
-            [InlineKeyboardButton("📁 MERCADO PAGO CNPJ (4)", callback_data="laras_3")],
-            [InlineKeyboardButton("📁 ASSAS PF (1)", callback_data="laras_4")],
-            [InlineKeyboardButton("📁 VOLTPIX - 0 MED E SAQUES CRIPTO (BEP20) (5)", callback_data="laras_5")],
-            [InlineKeyboardButton("⬅️ Menu", callback_data="menu_comprar")]
-        ]
-        texto = "📁 <b>Selecione uma categoria:</b>"
-        if query.message.photo:
-            await query.message.delete()
-            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-        else:
-            await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-    elif data.startswith("laras_"):
-        if data == "laras_1":
-            texto = (
-                "📌 <b>MERCADO PAGO LTDA | FACE HARMONIZAÇÃO FACIAL</b>\n\n"
-                "ℹ️ Descrição do Produto:\n"
-                "👦🏻 SEXUALIDADE: MASCULINO 🔐\n"
-                "📅 DATA DE NASCIMENTO: * 🔐\n"
-                "🔐 SENHA: * 🔐\n\n"
-                "🏦 Banco: MERCADO PAGO\n"
-                "👤 NOME COMPLETO: FACE HARMONIZAÇÃO FACIAL ****\n"
-                "🔐 CPF: *.*.*- ** 🔐\n\n"
-                "💵 Preço: R$ 200.00\n"
-                "📊 📦 Estoque: 1"
-            )
-        elif data == "laras_2":
-            texto = (
-                "📌 <b>ENCOMENDEI - MAGIE | FEMININO OU MASCULINO</b>\n\n"
-                "ℹ️ Descrição do Produto:\n"
-                "👩🏻 SEXUALIDADE: 🔐\n"
-                "📅 DATA DE NASCIMENTO: 🔐\n"
-                "🔐 SENHA: * 🔐\n\n"
-                "🏦 Banco: MAGIE\n"
-                "👤 NOME COMPLETO: ****\n"
-                "🔐 CPF: *.*.*- ** 🔐\n\n"
-                "💵 Preço: R$ 70.00\n"
-                "📊 📦 Estoque: 1"
-            )
-        elif data == "laras_3":
-             texto = (
-                "📌 <b>MERCADO PAGO CNPJ | 58.842.942 LETICIA SARAIVA</b>\n\n"
-                "ℹ️ Descrição do Produto:\n"
-                "👩🏻 SEXUALIDADE: MASCULINO 🔐\n"
-                "📅 DATA DE NASCIMENTO: * 🔐\n"
-                "🔐 SENHA: * 🔐\n\n"
-                "🏦 Banco: MERCADO PAGO\n"
-                "👤 NOME COMPLETO: LETÍCIA SARAIVA****\n"
-                "🔐 CPF: *.*.*- ** 🔐\n\n"
-                "💵 Preço: R$ 170.00\n"
-                "📊 📦 Estoque: 1\n\n"
-                "<i>(Temos 4 disponíveis nesta categoria)</i>"
-            )
-        elif data == "laras_4":
-            texto = (
-                "📌 <b>ENCOMENDEI - ASAAS | FEMININO OU MASCULINO</b>\n\n"
-                "ℹ️ Descrição do Produto:\n"
-                "👦🏻 SEXUALIDADE: 🔐\n"
-                "📅 DATA DE NASCIMENTO: * 🔐\n"
-                "🔐 SENHA: * 🔐\n\n"
-                "🏦 Banco: MERCADO PAGO\n"
-                "👤 NOME COMPLETO: ****\n"
-                "🔐 CPF: *.*.*- ** 🔐\n\n"
-                "💵 Preço: R$ 100.00\n"
-                "📊 📦 Estoque: 1"
-            )
-        elif data == "laras_5":
-             texto = (
-                "📌 <b>VOLTPIX LTDA | CORRETORA DE SEGUROS LTDA</b>\n\n"
-                "ℹ️ Descrição do Produto:\n"
-                "👩🏻 SEXUALIDADE: FEMININO 🔐\n"
-                "📅 DATA DE NASCIMENTO: * 🔐\n"
-                "🔐 SENHA: * 🔐\n\n"
-                "🏦 Gateway: VOLTPIX\n"
-                "👤 NOME COMPLETO: CORRETORA DE SEGUROS LTDA ****\n"
-                "🔐 CPF: *.*.*- ** 🔐\n\n"
-                "💵 Preço: R$ 120.00\n"
-                "📊 📦 Estoque: 1\n\n"
-                "<i>(Temos 5 disponíveis nesta categoria)</i>"
-            )
-
-        keyboard = [
-            [InlineKeyboardButton("💳 Comprar Produto", callback_data="sem_saldo_aviso")],
-            [InlineKeyboardButton("⬅️ Voltar para Lista", callback_data="laras")]
-        ]
-        await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-        
-    elif data == "sem_saldo_aviso":
-        await query.answer("❌ Estoque temporário alocado / Sem saldo.", show_alert=True)
-
-# ==============================================================================
-# FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM)
-# ==============================================================================
-async def add_estoque(update, context):
-    user_id = update.effective_user.id
-    if update.effective_chat.type != 'private':
-        return await update.message.reply_text("❌ Este comando só pode ser usado no privado.")
-
-    ADMIN_IDS = [7536040475]
-    if user_id not in ADMIN_IDS:
-        return await update.message.reply_text("🚫 Acesso negado.")
-
-    texto_bruto = update.message.text or ""
-
-    try:
-        global DADOS_CARTOES
-
-        cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
-        banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
-        nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
-        tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
-        nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
-        cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
-        preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
-        saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
-
-        tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", texto_bruto)
-        categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
-
-        if not cartao_match:
-            return await update.message.reply_text("❌ Não foi possível identificar o 'Número do Cartão' na ficha enviada.")
-
-        preco_val = float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0
-        saldo_val = float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0
-
-        card_raw = {
-            "id": f"card_{len(DADOS_CARTOES) + 1}",
-            "cc": cartao_match.group(1).strip(),
-            "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
-            "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
-            "categoria_produto": categoria_final,
-            "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
-            "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
-            "cpf": cpf_match.group(1).strip() if cpf_match else "",
-            "preco": preco_val,
-            "saldo_minimo": saldo_val,
-            "vendido": False
-        }
-
-        item_processado = edificar_item_estoque(card_raw)
-        DADOS_CARTOES.append(item_processado)
-
-        await update.message.reply_text(
-            f"✅ **Item Processado e Adicionado!**\n\n"
-            f"• **BIN:** `{item_processado['bin']}`\n"
-            f"• **Banco:** {item_processado['banco']}\n"
-            f"• **Bandeira:** {item_processado['bandeira']}\n"
-            f"• **Nível:** {item_processado['nivel_formatado']}\n"
-            f"• **Preço:** R$ {item_processado['preco']:.2f}\n"
-            f"• **Cartão Mascarado:** `{item_processado['cc_mascarado']}`",
-            parse_mode="Markdown"
-        )
-
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
-
-telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
+# --- REGISTRO DE HANDLERS ---
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
 telegram_app.add_handler(InlineQueryHandler(inline_search))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
-telegram_app.add_handler(CommandHandler("admin", painel_admin))
-telegram_app.add_handler(CommandHandler("add_estoque_esim", add_estoque_esim))
-telegram_app.add_handler(CommandHandler("add_estoque_laras", add_estoque_laras))
-telegram_app.add_handler(CommandHandler("add_estoque_ccfullldados", add_estoque_ccfullldados))
-telegram_app.add_handler(CommandHandler("add_estoque_consultavel", add_estoque_consultavel))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1443,6 +945,22 @@ async def misticpay_webhook(request: Request):
             user_id = int(description.split("User ")[1])
             SALDO_USUARIOS[user_id] = SALDO_USUARIOS.get(user_id, 0.0) + value
 
+            # Sistema de indicação: Se o usuário foi indicado, o indicador ganha R$ 1,00
+            referrer_id = INDICACOES_USUARIOS.get(user_id)
+            if referrer_id:
+                TOTAL_INDICADOS[referrer_id] = TOTAL_INDICADOS.get(referrer_id, 0) + 1
+                # Remove para contar apenas o primeiro depósito ou acumular se preferir
+                INDICACOES_USUARIOS.pop(user_id, None) 
+                SALDO_USUARIOS[referrer_id] = SALDO_USUARIOS.get(referrer_id, 0.0) + 1.00
+                try:
+                    await telegram_app.bot.send_message(
+                        chat_id=referrer_id,
+                        text=f"🎁 <b>PARABÉNS!</b> Um dos seus indicados realizou um depósito e você ganhou <b>R$ 1,00</b> de bônus em saldo!",
+                        parse_mode="HTML"
+                    )
+                except Exception:
+                    pass
+
             texto_sucesso = (
                 f"🔹 <b>CASABLANCA SHOP | PAGAMENTO CONFIRMADO</b> 🔹\n\n"
                 f"Foi creditado <b>R$ {value:,.2f}</b> na sua conta."
@@ -1453,14 +971,6 @@ async def misticpay_webhook(request: Request):
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
-
-# --- REGISTRO DE COMANDOS DO TELEGRAM ---
-telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("pix", comando_pix))
-telegram_app.add_handler(InlineQueryHandler(inline_search))
-telegram_app.add_handler(CallbackQueryHandler(botao_callback))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
 
 @app.get("/")
 async def root():
