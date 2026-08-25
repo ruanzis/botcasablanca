@@ -10,52 +10,6 @@ from fastapi import FastAPI, Request
 import qrcode
 import httpx
 import uvicorn
-import psycopg2
-from psycopg2.extras import RealDictCursor
-def inicializar_banco():
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        print("DATABASE_URL não encontrada nas variáveis de ambiente.")
-        return
-
-    try:
-        conn = psycopg2.connect(database_url)
-        cur = conn.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS estoque (
-                id SERIAL PRIMARY KEY,
-                cartao VARCHAR(255),
-                banco VARCHAR(255),
-                categoria VARCHAR(100),
-                tipo VARCHAR(50),
-                nome VARCHAR(255),
-                cpf VARCHAR(50),
-                preco NUMERIC(10, 2),
-                limite NUMERIC(10, 2),
-                val VARCHAR(100),
-                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.commit()
-        cur.close()
-        conn.close()
-        print("Tabela 'estoque' pronta e verificada com sucesso!")
-    except Exception as e:
-        print(f"Erro ao criar tabela: {e}")
-
-# Execute a função na inicialização do bot
-inicializar_banco()
-
-# URL de conexão do PostgreSQL (Ex: Render fornece a DATABASE_URL nas variáveis de ambiente)
-DATABASE_URL = "postgresql://postgres:2103@localhost:5432/postgres"
-
-def get_db_connection():
-    db_url = os.environ.get("DATABASE_URL") or "postgresql://postgres:2103@localhost:6543/postgres"
-    conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
-    return conn
-    
-    conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
-    return conn
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -1109,61 +1063,57 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
-    cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
-    banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
-    nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
-    tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
-    nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
-    cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
-    preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
-    saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
-
-    # Tratamento seguro para valores decimais (removendo pontos de milhar e trocando vírgula por ponto)
-    def limpar_valor(match):
-        if not match:
-            return 0.0
-        val = match.group(1).strip()
-        # Se houver formato brasileiro 1.234,56
-        if "." in val and "," in val:
-            val = val.replace(".", "").replace(",", ".")
-        elif "," in val:
-            val = val.replace(",", ".")
-        try:
-            return float(val)
-        except ValueError:
-            return 0.0
-
-    preco_val = limpar_valor(preco_match)
-    saldo_val = limpar_valor(saldo_match)
-
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        cur.execute(
-            """
-            INSERT INTO estoque (cartao, banco, categoria, tipo, nome, cpf, preco, limite, val)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                cartao_match.group(1).strip() if cartao_match else "N/D",
-                banco_match.group(1).strip() if banco_match else "N/D",
-                nivel_match.group(1).strip() if nivel_match else "STANDARD",
-                tipo_match.group(1).strip() if tipo_match else "Crédito",
-                nome_match.group(1).strip() if nome_match else "N/D",
-                cpf_match.group(1).strip() if cpf_match else "N/D",
-                preco_val,
-                saldo_val,
-                "N/D"
-            )
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
+        global DADOS_CARTOES
 
-        await update.message.reply_text("✅ Estoque adicionado com sucesso ao banco PostgreSQL!")
+        cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
+        banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
+        nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
+        tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
+        nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
+        cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
+        preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
+        saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
+
+        tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", texto_bruto)
+        categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
+
+        if not cartao_match:
+            return await update.message.reply_text("❌ Não foi possível identificar o 'Número do Cartão' na ficha enviada.")
+
+        preco_val = float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0
+        saldo_val = float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0
+
+        card_raw = {
+            "id": f"card_{len(DADOS_CARTOES) + 1}",
+            "cc": cartao_match.group(1).strip(),
+            "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
+            "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
+            "categoria_produto": categoria_final,
+            "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
+            "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
+            "cpf": cpf_match.group(1).strip() if cpf_match else "",
+            "preco": preco_val,
+            "saldo_minimo": saldo_val,
+            "vendido": False
+        }
+
+        item_processado = edificar_item_estoque(card_raw)
+        DADOS_CARTOES.append(item_processado)
+
+        await update.message.reply_text(
+            f"✅ **Item Processado e Adicionado!**\n\n"
+            f"• **BIN:** `{item_processado['bin']}`\n"
+            f"• **Banco:** {item_processado['banco']}\n"
+            f"• **Bandeira:** {item_processado['bandeira']}\n"
+            f"• **Nível:** {item_processado['nivel_formatado']}\n"
+            f"• **Preço:** R$ {item_processado['preco']:.2f}\n"
+            f"• **Cartão Mascarado:** `{item_processado['cc_mascarado']}`",
+            parse_mode="Markdown"
+        )
+
     except Exception as e:
-        await update.message.reply_text(f"❌ Erro ao adicionar estoque no banco de dados: <code>{e}</code>", parse_mode="HTML")
+        await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
 
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
@@ -1214,6 +1164,14 @@ async def misticpay_webhook(request: Request):
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# --- REGISTRO DE COMANDOS DO TELEGRAM ---
+telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("pix", comando_pix))
+telegram_app.add_handler(InlineQueryHandler(inline_search))
+telegram_app.add_handler(CallbackQueryHandler(botao_callback))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
 
 @app.get("/")
 async def root():
