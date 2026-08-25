@@ -1123,12 +1123,42 @@ async def add_estoque(update, context):
     if update.effective_chat.type != 'private':
         return await update.message.reply_text("❌ Este comando só pode ser usado no privado.")
 
-    ADMIN_IDS = [7536040475]
+    ADMIN_IDS = [7536848475]
     if user_id not in ADMIN_IDS:
-        return await update.message.reply_text("🚫 Acesso negado.")
+        return await update.message.reply_text("❌ Acesso negado.")
 
-    texto_bruto = update.message.text or ""
+    texto_completo = update.message.text or ""
+    
+    # Remove o comando /add_estoque do texto para processar apenas o conteúdo dos cartões
+    if texto_completo.startswith("/add_estoque"):
+        texto_completo = texto_completo.replace("/add_estoque", "", 1).strip()
 
+    if not texto_completo:
+        return await update.message.reply_text("❌ Envie os cartões junto com o comando /add_estoque (separados por parágrafos).")
+
+    # Divide o texto grandão por blocos (separados por linhas em branco / parágrafos)
+    blocos_cartoes = texto_completo.split("\n\n")
+    
+    contador = 0
+    aguardando_msg = await update.message.reply_text(f"⏳ Processando e salvando cartões no Firebase Firestore...")
+
+    for bloco in blocos_cartoes:
+        if "Número do Cartão:" in bloco:
+            # Usa a nossa função inteligente que extrai e limpa os dados perfeitamente
+            dados_cartao = extrair_dados_cartao(bloco)
+            
+            # Salva diretamente na coleção "estoque" do Firebase Firestore
+            try:
+                db.collection("estoque").add(dados_cartao)
+                contador += 1
+            except Exception as e:
+                print(f"Erro ao salvar cartão no Firebase: {e}")
+
+    await context.bot.edit_message_text(
+        chat_id=update.effective_chat.id,
+        message_id=aguardando_msg.message_id,
+        text=f"✅ **Sucesso!** {contador} cartões foram processados e salvos com segurança no Firebase Firestore da nuvem!"
+    )
     try:
         global DADOS_CARTOES
 
