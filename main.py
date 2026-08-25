@@ -10,35 +10,6 @@ from fastapi import FastAPI, Request
 import qrcode
 import httpx
 import uvicorn
-import os
-import json
-import firebase_admin
-from firebase_admin import credentials, firestore
-from google.cloud import firestore as google_firestore
-from dotenv import load_dotenv
-
-# Carrega variáveis locais de um arquivo .env se você estiver testando no seu computador
-load_dotenv()
-
-# Pega o conteúdo do JSON que estará salvo nas configurações do servidor/GitHub Actions
-firebase_config_str = os.getenv("FIREBASE_CREDENTIALS_JSON")
-
-if firebase_config_str:
-    # Se a variável existir (usado no servidor/produção)
-    cred_dict = json.loads(firebase_config_str)
-    cred = credentials.Certificate(cred_dict)
-else:
-    # Se estiver rodando localmente no seu PC usando o arquivo JSON direto
-    cred = credentials.Certificate("firebase_key.json")
-
-firebase_admin.initialize_app(cred)
-db = firestore.client()
-
-# Teste rápido de conexão com o Firestore
-try:
-    print("Conexão com o Firebase Firestore estabelecida com sucesso!")
-except Exception as e:
-    print(f"Erro ao conectar com o Firebase: {e}")
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -86,45 +57,7 @@ POLITICA_REEMBOLSO = (
 SALDO_USUARIOS = {}
 CACHE_CANAL = {}
 # estoque.py
-# --- FUNÇÃO DE LEITURA E PARSER INTELIGENTE DO CARTÃO ---
-import re
 
-def extrair_dados_cartao(texto):
-    """
-    Lê o texto do cartão enviado e extrai as informações estruturadas
-    exatamente no formato exigido para salvar no Firestore.
-    """
-    def pegar(padrao, texto_base, tipo=str, default=None):
-        match = re.search(padrao, texto_base, re.IGNORECASE)
-        if match:
-            val = match.group(1).strip()
-            if val.upper() in ["N/D", "ND", "NAO INFORMADO", "-"]:
-                return default
-            if tipo == float:
-                val_limpo = val.replace("R$", "").replace(".", "").replace(",", ".").strip()
-                try:
-                    return float(val_limpo)
-                except ValueError:
-                    return default
-            return val
-        return default
-
-    cartao_dict = {
-        "bin": pegar(r"Número do Cartão:\s*(.+)", texto),
-        "banco": pegar(r"Banco:\s*(.+)", texto),
-        "categoria": pegar(r"Categoria:\s*(.+)", texto),
-        "tipo": pegar(r"Tipo:\s*(.+)", texto),
-        "nome": pegar(r"Nome:\s*(.+)", texto),
-        "cpf": pegar(r"CPF:\s*([\d\.\-]+)", texto),
-        "score_serasa": pegar(r"Score Serasa:\s*(.+)", texto),
-        "score_bc": pegar(r"Score BC:\s*(\d+)", texto, int),
-        "preco": pegar(r"Valor da Compra:\s*R\$\s*([\d\.,]+)", texto),
-        "limite_garantido": pegar(r"Saldo mínimo garantido:\s*R\$\s*([\d\.,]+)", texto, float),
-        "posicao": pegar(r"(Cartão\s*\d+\s*de\s*\d+)", texto)
-    }
-    
-    return cartao_dict
-#---
 estoque_novos_cartoes = [
     {
         "cartao": "470598******8057",
@@ -1124,69 +1057,63 @@ async def add_estoque(update, context):
     if update.effective_chat.type != 'private':
         return await update.message.reply_text("❌ Este comando só pode ser usado no privado.")
 
-    texto_completo = update.message.text or ""
-    if texto_completo.startswith("/add_estoque"):
-        texto_completo = texto_completo.replace("/add_estoque", "", 1).strip()
+    ADMIN_IDS = [7536040475]
+    if user_id not in ADMIN_IDS:
+        return await update.message.reply_text("🚫 Acesso negado.")
 
-    if not texto_completo:
-        return await update.message.reply_text("❌ Envie os cartões junto com o comando /add_estoque.")
+    texto_bruto = update.message.text or ""
 
-    # Fatia o texto por cada cartão usando a sua estrutura original
-    partes = texto_completo.split("Número do Cartão:")
-    contador = 0
-    
-    aguardando_msg = await update.message.reply_text("⏳ Processando e salvando no Firebase...")
+    try:
+        global DADOS_CARTOES
 
-    for parte in partes:
-        if not parte.strip():
-            continue
-        
-        # Reconstrói o texto bruto individual de cada cartão para o seu regex funcionar perfeitamente
-        texto_bruto = "Número do Cartão:" + parte
+        cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
+        banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
+        nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
+        tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
+        nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
+        cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
+        preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
+        saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
 
-        try:
-            cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
-            banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
-            nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
-            tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
-            nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
-            cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
-            preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\.,]+)", texto_bruto)
-            saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\.,]+)", texto_bruto)
+        tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", texto_bruto)
+        categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
 
-            if not cartao_match:
-                continue
+        if not cartao_match:
+            return await update.message.reply_text("❌ Não foi possível identificar o 'Número do Cartão' na ficha enviada.")
 
-            tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", texto_bruto)
-            categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
+        preco_val = float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0
+        saldo_val = float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0
 
-            preco_val = float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0
-            saldo_val = float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0
+        card_raw = {
+            "id": f"card_{len(DADOS_CARTOES) + 1}",
+            "cc": cartao_match.group(1).strip(),
+            "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
+            "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
+            "categoria_produto": categoria_final,
+            "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
+            "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
+            "cpf": cpf_match.group(1).strip() if cpf_match else "",
+            "preco": preco_val,
+            "saldo_minimo": saldo_val,
+            "vendido": False
+        }
 
-            # Dicionário estruturado idêntico ao que o seu bot já estava acostumado
-            dados_cartao = {
-                "cartao": cartao_match.group(1).strip(),
-                "banco": banco_match.group(1).strip() if banco_match else "N/D",
-                "categoria": categoria_final,
-                "tipo": tipo_match.group(1).strip() if tipo_match else "Crédito",
-                "nome": nome_match.group(1).strip() if nome_match else "N/D",
-                "cpf": cpf_match.group(1).strip() if cpf_match else "N/D",
-                "preco": preco_val,
-                "limite_garantido": saldo_val
-            }
+        item_processado = edificar_item_estoque(card_raw)
+        DADOS_CARTOES.append(item_processado)
 
-            # Envia para a nuvem do Firebase Firestore (substitui a lista local antiga)
-            db.collection("estoque").add(dados_cartao)
-            contador += 1
+        await update.message.reply_text(
+            f"✅ **Item Processado e Adicionado!**\n\n"
+            f"• **BIN:** `{item_processado['bin']}`\n"
+            f"• **Banco:** {item_processado['banco']}\n"
+            f"• **Bandeira:** {item_processado['bandeira']}\n"
+            f"• **Nível:** {item_processado['nivel_formatado']}\n"
+            f"• **Preço:** R$ {item_processado['preco']:.2f}\n"
+            f"• **Cartão Mascarado:** `{item_processado['cc_mascarado']}`",
+            parse_mode="Markdown"
+        )
 
-        except Exception as e:
-            print(f"Erro ao processar ficha: {e}")
-
-    await context.bot.edit_message_text(
-        chat_id=update.effective_chat.id,
-        message_id=aguardando_msg.message_id,
-        text=f"✅ **Sucesso!** {contador} cartões foram salvos diretamente no Firebase Firestore!"
-    )
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
 
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
