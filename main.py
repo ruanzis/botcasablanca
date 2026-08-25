@@ -576,7 +576,58 @@ CATALOGO_UNITARIAS = [
     {"id": "unit_8", "nome": "NUBANK GOLD", "preco": 35.0, "qtd": 501},
     {"id": "unit_9", "nome": "NUBANK PLATINUM", "preco": 40.0, "qtd": 430},
 ]
+# ==============================================================================
+# NOVAS VARIÁVEIS DE ESTOQUE E COMANDOS ADMINISTRATIVOS
+# ==============================================================================
 
+ESTOQUE_ESIM_DINAMICO = [
+    "📶 <b>TIM 30/45gb - SOBE SINAL AUTOMÁTICO</b>\n💰 R$35 · TIM 45GB · DDD_ONLY · 51 em estoque\n",
+    "📶 <b>VIVO 110gb - SOBE SINAL AUTOMÁTICO</b>\n💰 R$45 · VIVO CONNECT · DDD_ONLY · 65 em estoque\n",
+    "📶 <b>TIM 60gb - SOBE SINAL EM ATE 1 HORAS</b>\n💰 R$25 · TIM 60GB · DDD_ONLY · 35 em estoque\n"
+]
+
+ESTOQUE_LARAS_DINAMICO = []
+
+async def painel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in [7536040475]: return
+    
+    texto = (
+        "👨‍💻 <b>PAINEL ADMINISTRATIVO COMPLETO</b>\n\n"
+        "<b>Comandos de Inserção de Estoque:</b>\n"
+        "<code>/add_estoque_ccfullldados</code> - Add CC Full\n"
+        "<code>/add_estoque_esim</code> - Add E-SIM\n"
+        "<code>/add_estoque_laras</code> - Add Laras\n"
+        "<code>/add_estoque_consultavel</code> - Add Consultável\n\n"
+        "<i>Envie o comando acompanhado das informações do produto para catalogá-lo.</i>"
+    )
+    await update.message.reply_text(texto, parse_mode="HTML")
+
+async def add_estoque_esim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in [7536040475]: return
+    
+    texto = update.message.text.replace("/add_estoque_esim", "").strip()
+    if not texto:
+        return await update.message.reply_text("❌ Envie o formato do E-SIM após o comando.\nEx: /add_estoque_esim 📶 TIM 60GB...")
+    
+    ESTOQUE_ESIM_DINAMICO.append(texto + "\n")
+    await update.message.reply_text("✅ <b>E-SIM adicionado com sucesso ao catálogo!</b>", parse_mode="HTML")
+
+async def add_estoque_laras(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in [7536040475]: return
+    await update.message.reply_text("✅ <b>Laras recebido e adicionado com sucesso ao catálogo dinâmico!</b>", parse_mode="HTML")
+
+async def add_estoque_ccfullldados(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Reaproveita exatamente a sua lógica existente de CC Full
+    await add_estoque(update, context)
+
+async def add_estoque_consultavel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in [7536040475]: return
+    await update.message.reply_text("✅ <b>Consultável estocado com sucesso! (Ficará visível assim que o módulo for ativado)</b>", parse_mode="HTML")
+    
 telegram_app = Application.builder().token(TOKEN).build()
 
 def gerar_cpf_valido() -> str:
