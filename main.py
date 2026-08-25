@@ -947,7 +947,10 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
     # === NOVOS MENUS E FERRAMENTAS ===
-    elif data in ["menu_esim", "menu_laras", "menu_ferramentas"]:
+    saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
+
+    # O primeiro bloco DEVE começar com IF
+    if data in ["menu_esim", "menu_laras", "menu_ferramentas"]:
         keyboard = []
         
         if data == "menu_ferramentas":
@@ -1048,14 +1051,15 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Voltar", callback_data="voltar_inicio")]
         ]
         await query.message.edit_text(texto_ind, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
-    if data == "verificar":
+
+    # O antigo "if data == 'verificacao':" agora vira ELIF porque já temos um IF acima dele!
+    elif data == "verificacao":
         CACHE_CANAL.pop(user_id, None)
         if await esta_no_canal(context, user_id):
             await query.message.delete()
             await enviar_menu_principal(update, context)
         else:
             await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Você ainda não entrou no canal!", parse_mode="HTML")
-
     elif data == "add_saldo":
         await query.message.reply_text(
             "🔹 <b>CASABLANCA SHOP | ADICIONAR SALDO</b> 🔹\n\n"
