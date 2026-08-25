@@ -1191,6 +1191,7 @@ async def add_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=f"✅ **Sucesso!** {contador} cartões foram salvos diretamente no Firebase Firestore!",
     )
     )
+    )
         try:
             # Buscas flexíveis por regex para capturar os dados independente de pequenos detalhes
             cartao_match = re.search(r'(?:Número do Cartão|Cartão|CC)[:\s]*([^\n]+)', ficha, re.IGNORECASE)
