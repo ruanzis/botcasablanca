@@ -1084,31 +1084,52 @@ async def add_estoque(update, context):
     preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
     saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
 
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute(
-        """
-        INSERT INTO estoque (cartao, banco, categoria, tipo, nome, cpf, preco, limite, val)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """,
-        (
-            cartao_match.group(1).strip() if cartao_match else "N/D",
-            banco_match.group(1).strip() if banco_match else "N/D",
-            nivel_match.group(1).strip() if nivel_match else "STANDARD",
-            tipo_match.group(1).strip() if tipo_match else "Crédito",
-            nome_match.group(1).strip() if nome_match else "N/D",
-            cpf_match.group(1).strip() if cpf_match else "N/D",
-            preco_match.group(1).strip() if preco_match else "0.00",
-            saldo_match.group(1).strip() if saldo_match else "0.00",
-            "N/D"
-       )
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    # Tratamento seguro para valores decimais (removendo pontos de milhar e trocando vírgula por ponto)
+    def limpar_valor(match):
+        if not match:
+            return 0.0
+        val = match.group(1).strip()
+        # Se houver formato brasileiro 1.234,56
+        if "." in val and "," in val:
+            val = val.replace(".", "").replace(",", ".")
+        elif "," in val:
+            val = val.replace(",", ".")
+        try:
+            return float(val)
+        except ValueError:
+            return 0.0
 
-    await update.message.reply_text("✅ Estoque adicionado com sucesso ao banco PostgreSQL!")
+    preco_val = limpar_valor(preco_match)
+    saldo_val = limpar_valor(saldo_match)
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            """
+            INSERT INTO estoque (cartao, banco, categoria, tipo, nome, cpf, preco, limite, val)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                cartao_match.group(1).strip() if cartao_match else "N/D",
+                banco_match.group(1).strip() if banco_match else "N/D",
+                nivel_match.group(1).strip() if nivel_match else "STANDARD",
+                tipo_match.group(1).strip() if tipo_match else "Crédito",
+                nome_match.group(1).strip() if nome_match else "N/D",
+                cpf_match.group(1).strip() if cpf_match else "N/D",
+                preco_val,
+                saldo_val,
+                "N/D"
+            )
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        await update.message.reply_text("✅ Estoque adicionado com sucesso ao banco PostgreSQL!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erro ao adicionar estoque no banco de dados: <code>{e}</code>", parse_mode="HTML")
 
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
@@ -1159,14 +1180,6 @@ async def misticpay_webhook(request: Request):
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
-
-# --- REGISTRO DE COMANDOS DO TELEGRAM ---
-telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("pix", comando_pix))
-telegram_app.add_handler(InlineQueryHandler(inline_search))
-telegram_app.add_handler(CallbackQueryHandler(botao_callback))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
 
 @app.get("/")
 async def root():
