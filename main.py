@@ -1075,6 +1075,15 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
+cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
+    banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
+    nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
+    tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
+    nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
+    cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
+    preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
+    saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
+
    # Em vez de db.collection("estoque").add(dados_cartao), usamos SQL:
 
 conn = get_db_connection()
