@@ -1106,6 +1106,18 @@ async def add_estoque(update, context):
     except Exception as e:
         await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
 
+telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("pix", comando_pix))
+telegram_app.add_handler(InlineQueryHandler(inline_search))
+telegram_app.add_handler(CallbackQueryHandler(botao_callback))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
+telegram_app.add_handler(CommandHandler("admin", painel_admin))
+telegram_app.add_handler(CommandHandler("add_estoque_esim", add_estoque_esim))
+telegram_app.add_handler(CommandHandler("add_estoque_laras", add_estoque_laras))
+telegram_app.add_handler(CommandHandler("add_estoque_ccfullldados", add_estoque_ccfullldados))
+telegram_app.add_handler(CommandHandler("add_estoque_consultavel", add_estoque_consultavel))
+
 # --- REGISTRO DE HANDLERS ---
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
