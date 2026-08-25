@@ -1101,6 +1101,124 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await enviar_menu_principal(update, context)
 
 # ==============================================================================
+    # 👇 NOVAS IMPLEMENTAÇÕES DE CATÁLOGOS - INJETADAS AQUI 👇
+    # ==============================================================================
+    elif data in ["logins", "consultavel", "cc_auxiliar"]:
+        await query.answer("❌ Não há estoques disponíveis no momento.", show_alert=True)
+        
+    elif data == "esim":
+        keyboard = [
+            [InlineKeyboardButton("Escolher DDD · TIM 30/45gb", callback_data="sem_saldo_aviso")],
+            [InlineKeyboardButton("Escolher DDD · VIVO 110gb", callback_data="sem_saldo_aviso")],
+            [InlineKeyboardButton("Escolher DDD · TIM 60gb", callback_data="sem_saldo_aviso")],
+            [InlineKeyboardButton("◀️ Voltar ao menu", callback_data="menu_comprar")]
+        ]
+        
+        texto = "📦 <b>Prateleira</b>\n\n"
+        for item in ESTOQUE_ESIM_DINAMICO:
+            texto += f"{item}\n"
+            
+        if query.message.photo:
+            await query.message.delete()
+            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        else:
+            await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data == "laras":
+        keyboard = [
+            [InlineKeyboardButton("📁 MERCADO PAGO LTDA (1)", callback_data="laras_1")],
+            [InlineKeyboardButton("📁 MAGIE - FEITA NO SEU WHATSAPP (1)", callback_data="laras_2")],
+            [InlineKeyboardButton("📁 MERCADO PAGO CNPJ (4)", callback_data="laras_3")],
+            [InlineKeyboardButton("📁 ASSAS PF (1)", callback_data="laras_4")],
+            [InlineKeyboardButton("📁 VOLTPIX - 0 MED E SAQUES CRIPTO (BEP20) (5)", callback_data="laras_5")],
+            [InlineKeyboardButton("⬅️ Menu", callback_data="menu_comprar")]
+        ]
+        texto = "📁 <b>Selecione uma categoria:</b>"
+        if query.message.photo:
+            await query.message.delete()
+            await context.bot.send_message(chat_id=chat_id, text=texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        else:
+            await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("laras_"):
+        if data == "laras_1":
+            texto = (
+                "📌 <b>MERCADO PAGO LTDA | FACE HARMONIZAÇÃO FACIAL</b>\n\n"
+                "ℹ️ Descrição do Produto:\n"
+                "👦🏻 SEXUALIDADE: MASCULINO 🔐\n"
+                "📅 DATA DE NASCIMENTO: * 🔐\n"
+                "🔐 SENHA: * 🔐\n\n"
+                "🏦 Banco: MERCADO PAGO\n"
+                "👤 NOME COMPLETO: FACE HARMONIZAÇÃO FACIAL ****\n"
+                "🔐 CPF: *.*.*- ** 🔐\n\n"
+                "💵 Preço: R$ 200.00\n"
+                "📊 📦 Estoque: 1"
+            )
+        elif data == "laras_2":
+            texto = (
+                "📌 <b>ENCOMENDEI - MAGIE | FEMININO OU MASCULINO</b>\n\n"
+                "ℹ️ Descrição do Produto:\n"
+                "👩🏻 SEXUALIDADE: 🔐\n"
+                "📅 DATA DE NASCIMENTO: 🔐\n"
+                "🔐 SENHA: * 🔐\n\n"
+                "🏦 Banco: MAGIE\n"
+                "👤 NOME COMPLETO: ****\n"
+                "🔐 CPF: *.*.*- ** 🔐\n\n"
+                "💵 Preço: R$ 70.00\n"
+                "📊 📦 Estoque: 1"
+            )
+        elif data == "laras_3":
+             texto = (
+                "📌 <b>MERCADO PAGO CNPJ | 58.842.942 LETICIA SARAIVA</b>\n\n"
+                "ℹ️ Descrição do Produto:\n"
+                "👩🏻 SEXUALIDADE: MASCULINO 🔐\n"
+                "📅 DATA DE NASCIMENTO: * 🔐\n"
+                "🔐 SENHA: * 🔐\n\n"
+                "🏦 Banco: MERCADO PAGO\n"
+                "👤 NOME COMPLETO: LETÍCIA SARAIVA****\n"
+                "🔐 CPF: *.*.*- ** 🔐\n\n"
+                "💵 Preço: R$ 170.00\n"
+                "📊 📦 Estoque: 1\n\n"
+                "<i>(Temos 4 disponíveis nesta categoria)</i>"
+            )
+        elif data == "laras_4":
+            texto = (
+                "📌 <b>ENCOMENDEI - ASAAS | FEMININO OU MASCULINO</b>\n\n"
+                "ℹ️ Descrição do Produto:\n"
+                "👦🏻 SEXUALIDADE: 🔐\n"
+                "📅 DATA DE NASCIMENTO: * 🔐\n"
+                "🔐 SENHA: * 🔐\n\n"
+                "🏦 Banco: MERCADO PAGO\n"
+                "👤 NOME COMPLETO: ****\n"
+                "🔐 CPF: *.*.*- ** 🔐\n\n"
+                "💵 Preço: R$ 100.00\n"
+                "📊 📦 Estoque: 1"
+            )
+        elif data == "laras_5":
+             texto = (
+                "📌 <b>VOLTPIX LTDA | CORRETORA DE SEGUROS LTDA</b>\n\n"
+                "ℹ️ Descrição do Produto:\n"
+                "👩🏻 SEXUALIDADE: FEMININO 🔐\n"
+                "📅 DATA DE NASCIMENTO: * 🔐\n"
+                "🔐 SENHA: * 🔐\n\n"
+                "🏦 Gateway: VOLTPIX\n"
+                "👤 NOME COMPLETO: CORRETORA DE SEGUROS LTDA ****\n"
+                "🔐 CPF: *.*.*- ** 🔐\n\n"
+                "💵 Preço: R$ 120.00\n"
+                "📊 📦 Estoque: 1\n\n"
+                "<i>(Temos 5 disponíveis nesta categoria)</i>"
+            )
+
+        keyboard = [
+            [InlineKeyboardButton("💳 Comprar Produto", callback_data="sem_saldo_aviso")],
+            [InlineKeyboardButton("⬅️ Voltar para Lista", callback_data="laras")]
+        ]
+        await query.message.edit_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        
+    elif data == "sem_saldo_aviso":
+        await query.answer("❌ Estoque temporário alocado / Sem saldo.", show_alert=True)
+
+# ==============================================================================
 # FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM)
 # ==============================================================================
 async def add_estoque(update, context):
@@ -1172,6 +1290,11 @@ telegram_app.add_handler(CommandHandler("pix", comando_pix))
 telegram_app.add_handler(InlineQueryHandler(inline_search))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
+telegram_app.add_handler(CommandHandler("admin", painel_admin))
+telegram_app.add_handler(CommandHandler("add_estoque_esim", add_estoque_esim))
+telegram_app.add_handler(CommandHandler("add_estoque_laras", add_estoque_laras))
+telegram_app.add_handler(CommandHandler("add_estoque_ccfullldados", add_estoque_ccfullldados))
+telegram_app.add_handler(CommandHandler("add_estoque_consultavel", add_estoque_consultavel))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
