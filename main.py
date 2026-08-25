@@ -32,6 +32,12 @@ else:
 
 firebase_admin.initialize_app(cred)
 db = firestore.client()
+
+# Teste rápido de conexão com o Firestore
+try:
+    print("Conexão com o Firebase Firestore estabelecida com sucesso!")
+except Exception as e:
+    print(f"Erro ao conectar com o Firebase: {e}")
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
