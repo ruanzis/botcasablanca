@@ -403,15 +403,40 @@ async def comando_notificar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in ADMIN_IDS and user_id != ADMIN_ID:
         return await update.message.reply_text("🚫 Acesso negado.")
 
-    mensagem = update.message.text.replace("/notificar", "").strip()
-    if not mensagem:
-        return await update.message.reply_text("⚠️ Envie a mensagem após o comando. Exemplo: <code>/notificar Novo estoque liberado!</code>", parse_mode="HTML")
-
     sucesso = 0
     falha = 0
+
+    # Funcionalidade 1: Se for resposta a uma mensagem existente, replica a mensagem fielmente
+    if update.message.reply_to_message:
+        for uid in list(USUARIOS_REGISTRADOS):
+            try:
+                await update.message.reply_to_message.copy(chat_id=uid)
+                sucesso += 1
+            except Exception:
+                falha += 1
+        return await update.message.reply_text(f"📢 <b>Notificação enviada!</b>\n\n✅ Enviados: {sucesso}\n❌ Falhas: {falha}", parse_mode="HTML")
+
+    # Funcionalidade 2: Trata fotos e textos HTML de uma única mensagem com formatação
+    html_text = update.message.caption_html if update.message.photo else update.message.text_html
+    html_text = html_text or ""
+    
+    # Remove o prefixo do comando mantendo perfeitamente negritos, emojis e emojis premiums
+    html_text = re.sub(r"^/notificar\s*", "", html_text, flags=re.IGNORECASE).strip()
+
+    if not html_text and not update.message.photo:
+        return await update.message.reply_text("⚠️ Envie a mensagem após o comando (com ou sem foto) ou responda a uma mensagem com /notificar.", parse_mode="HTML")
+
     for uid in list(USUARIOS_REGISTRADOS):
         try:
-            await context.bot.send_message(chat_id=uid, text=mensagem, parse_mode="HTML")
+            if update.message.photo:
+                await context.bot.send_photo(
+                    chat_id=uid,
+                    photo=update.message.photo[-1].file_id,
+                    caption=html_text,
+                    parse_mode="HTML"
+                )
+            else:
+                await context.bot.send_message(chat_id=uid, text=html_text, parse_mode="HTML")
             sucesso += 1
         except Exception:
             falha += 1
@@ -496,7 +521,7 @@ async def painel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = (
         "👨‍💻 <b>PAINEL ADMINISTRATIVO COMPLETO</b>\n\n"
         "<b>Comandos de Inserção de Estoque:</b>\n"
-        "<code>/add_estoque_ccfullldados</code> - Add CC Full\n"
+        "<code>/add_estoque_ccfullldados</code> - Add CC Full (Lote/Único)\n"
         "<code>/add_estoque_esim</code> - Add E-SIM\n"
         "<code>/add_estoque_laras</code> - Add Laras\n"
         "<code>/add_estoque_consultavel</code> - Add Consultável\n"
@@ -905,6 +930,9 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cartoes_filtrados = [c for c in DADOS_CARTOES if not c["vendido"] and (not query or query in c["bin"].lower() or query in c["banco"].lower() or query in c["nivel_formatado"].lower())]
 
     for item in cartoes_filtrados:
+        saldo_fmt = f"{item['saldo_minimo']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        preco_fmt = f"{item['preco']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        
         texto_resposta = (
             f"Número do Cartão: <code>{item['cc_mascarado']}</code>\n"
             f"Banco: {item['banco']}\n"
@@ -914,11 +942,11 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"CPF: <code>{item['cpf']}</code>\n"
             f"Score Serasa: <code>{item['score_serasa']}</code>\n"
             f"Score BC: <code>{item['score_bc']}</code>\n\n"
-            f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:,.2f}</b>\n"
+            f"<b>Saldo mínimo garantido: R$ {saldo_fmt}</b>\n"
             f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a <b>Política de Reembolso</b>.\n\n"
-            f"Valor da Compra: R$ {item['preco']:,.2f}\n\n"
+            f"Valor da Compra: R$ {preco_fmt}\n\n"
             f"Fornecedor: <i>{item['fornecedor']}</i>"
-        ).replace(",", "X").replace(".", ",").replace("X", ".")
+        )
 
         keyboard = [
             [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{item['id']}")],
@@ -939,6 +967,8 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.inline_query.answer(results, cache_time=1)
 
 def montar_texto_cartao_unitario(item: dict) -> str:
+    saldo_fmt = f"{item['saldo_minimo']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    preco_fmt = f"{item['preco']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return (
         f"Número do Cartão: <code>{item['cc_mascarado']}</code>\n"
         f"Banco: {item['banco']}\n"
@@ -948,11 +978,11 @@ def montar_texto_cartao_unitario(item: dict) -> str:
         f"CPF: <code>{item['cpf']}</code>\n"
         f"Score Serasa: <code>{item['score_serasa']}</code>\n"
         f"Score BC: <code>{item['score_bc']}</code>\n\n"
-        f"<b>Saldo mínimo garantido: R$ {item['saldo_minimo']:,.2f}</b>\n"
+        f"<b>Saldo mínimo garantido: R$ {saldo_fmt}</b>\n"
         f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a <b>Política de Reembolso</b>.\n\n"
-        f"Valor da Compra: R$ {item['preco']:,.2f}\n\n"
+        f"Valor da Compra: R$ {preco_fmt}\n\n"
         f"Fornecedor: <i>{item['fornecedor']}</i>"
-    ).replace(",", "X").replace(".", ",").replace("X", ".")
+    )
 
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1079,13 +1109,14 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await responder_ou_editar(query, texto, InlineKeyboardMarkup(keyboard))
 
     elif data == "voltar_cc_full":
+        saldo_fmt = f"{saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         keyboard = [
             [InlineKeyboardButton("🔢 Unitárias", callback_data="ver_unitarias")],
             [InlineKeyboardButton("📊 Pesquisar por Nível / BIN / Banco", switch_inline_query_current_chat="")],
             [InlineKeyboardButton("💬 Atendimento/suporte", url=LINK_SUPORTE)],
             [InlineKeyboardButton("🔙 Voltar", callback_data="menu_comprar")],
         ]
-        texto = f"🔹 <b>CASABLANCA SHOP | CC FULL DADOS</b> 🔹\n\nInformações:\n- Saldo: R$ {saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        texto = f"🔹 <b>CASABLANCA SHOP | CC FULL DADOS</b> 🔹\n\nInformações:\n- Saldo: R$ {saldo_fmt}"
         await responder_ou_editar(query, texto, InlineKeyboardMarkup(keyboard))
 
     elif data == "ver_unitarias":
@@ -1116,20 +1147,23 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if card["vendido"]:
                 await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Este item já foi vendido!", parse_mode="HTML")
             elif saldo_atual < card["preco"]:
+                preco_fmt = f"{card['preco']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                saldo_fmt = f"{saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
                         f"🔹 <b>CASABLANCA SHOP | SALDO INSUFICIENTE</b> 🔹\n\n"
                         f"❌ Saldo insuficiente para esta compra!\n\n"
-                        f"🏷️ <b>Preço:</b> R$ {card['preco']:,.2f}\n"
-                        f"💰 <b>Seu Saldo:</b> R$ {saldo_atual:,.2f}\n\n"
+                        f"🏷️ <b>Preço:</b> R$ {preco_fmt}\n"
+                        f"💰 <b>Seu Saldo:</b> R$ {saldo_fmt}\n\n"
                         f"Adicione saldo digitando no chat: <code>/pix {int(card['preco'])}</code>"
-                    ).replace(",", "X").replace(".", ",").replace("X", "."),
+                    ),
                     parse_mode="HTML"
                 )
             else:
                 SALDO_USUARIOS[user_id] -= card["preco"]
                 card["vendido"] = True
+                novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
@@ -1139,14 +1173,15 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"<b>CPF:</b> <code>{card['cpf']}</code>\n"
                         f"<b>Score Serasa:</b> <code>{card['score_serasa']}</code>\n"
                         f"<b>Score BC:</b> <code>{card['score_bc']}</code>\n\n"
-                        f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}"
-                    ).replace(",", "X").replace(".", ",").replace("X", "."),
+                        f"Novo Saldo: R$ {novo_saldo_fmt}"
+                    ),
                     parse_mode="HTML",
                 )
 
     # --- BOTÃO INFORMAÇÕES (PERFIL) ---
     elif data == "info":
         nome_usuario = query.from_user.first_name or "Cliente"
+        saldo_fmt = f"{saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         texto_perfil = (
             f"<b>{nome_usuario}</b> ❗️\n"
             f"/menu\n"
@@ -1154,9 +1189,9 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"- Nome: <i>{nome_usuario}</i> ❗️\n"
             f"- Id: <code>{user_id}</code>\n\n"
             f"💰 <b>Carteira</b>\n"
-            f"- Saldo: R$ {saldo_atual:,.2f}\n"
+            f"- Saldo: R$ {saldo_fmt}\n"
             f"- Compras: 0"
-        ).replace(",", "X").replace(".", ",").replace("X", ".")
+        )
         keyboard = [
             [InlineKeyboardButton("🟢 Adicionar saldo", callback_data="add_saldo"),
              InlineKeyboardButton("📄 Histórico", callback_data="sem_saldo_aviso")],
@@ -1173,6 +1208,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         qtd_indicados = TOTAL_INDICADOS.get(user_id, 0)
         ganho_indicacao = qtd_indicados * 1.00
 
+        ganho_fmt = f"{ganho_indicacao:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         texto_ind = (
             f"<b>{query.from_user.first_name}</b> ❗️\n"
             f"/menu\n"
@@ -1182,10 +1218,10 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"• Seu indicador: {indicador_txt}\n"
             f"• Seus Indicados: {qtd_indicados}\n\n"
             f"💵 <b>Disponível agora:</b>\n"
-            f"• Para saldo no bot: R$ {ganho_indicacao:,.2f}\n"
+            f"• Para saldo no bot: R$ {ganho_fmt}\n"
             f"• Para receber via Pix: R$ 0,00\n\n"
             f"Use os botões abaixo para ver seu link ou converter bônus."
-        ).replace(",", "X").replace(".", ",").replace("X", ".")
+        )
         keyboard = [
             [InlineKeyboardButton("🔗 Meu link", url=link_indicacao)],
             [InlineKeyboardButton("💰 Receber via Pix", callback_data="sem_saldo_aviso"),
@@ -1224,12 +1260,15 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not ferramenta:
             return await query.answer("❌ Ferramenta não encontrada.", show_alert=True)
 
+        preco_fmt = f"{ferramenta['preco']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        saldo_fmt = f"{saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
         texto_tool = (
             f"🛠 <b>FERRAMENTA | {ferramenta['nome']}</b>\n\n"
             f"ℹ️ <b>Descrição:</b> {ferramenta['descricao']}\n"
-            f"💵 <b>Valor:</b> R$ {ferramenta['preco']:,.2f}\n\n"
-            f"Seu saldo atual: R$ {saldo_atual:,.2f}"
-        ).replace(",", "X").replace(".", ",").replace("X", ".")
+            f"💵 <b>Valor:</b> R$ {preco_fmt}\n\n"
+            f"Seu saldo atual: R$ {saldo_fmt}"
+        )
 
         keyboard = [
             [InlineKeyboardButton("✅ Comprar Ferramenta", callback_data=f"buy_tool_{ferramenta['id']}")],
@@ -1242,19 +1281,22 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ferramenta = next((f for f in CATALOGO_FERRAMENTAS if f["id"] == t_id), None)
         if ferramenta:
             if saldo_atual < ferramenta["preco"]:
+                preco_fmt = f"{ferramenta['preco']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                saldo_fmt = f"{saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
                         f"🔹 <b>CASABLANCA SHOP | SALDO INSUFICIENTE</b> 🔹\n\n"
                         f"❌ Saldo insuficiente para adquirir a ferramenta <b>{ferramenta['nome']}</b>!\n\n"
-                        f"🏷️ <b>Preço:</b> R$ {ferramenta['preco']:,.2f}\n"
-                        f"💰 <b>Seu Saldo:</b> R$ {saldo_atual:,.2f}\n\n"
+                        f"🏷️ <b>Preço:</b> R$ {preco_fmt}\n"
+                        f"💰 <b>Seu Saldo:</b> R$ {saldo_fmt}\n\n"
                         f"Adicione saldo digitando no chat: <code>/pix {int(ferramenta['preco'])}</code>"
-                    ).replace(",", "X").replace(".", ",").replace("X", "."),
+                    ),
                     parse_mode="HTML"
                 )
             else:
                 SALDO_USUARIOS[user_id] -= ferramenta["preco"]
+                novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
@@ -1262,8 +1304,8 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"Ferramenta: <b>{ferramenta['nome']}</b>\n"
                         f"Descrição: {ferramenta['descricao']}\n\n"
                         f"Suporte e entrega imediata via {LINK_SUPORTE}\n\n"
-                        f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}"
-                    ).replace(",", "X").replace(".", ",").replace("X", "."),
+                        f"Novo Saldo: R$ {novo_saldo_fmt}"
+                    ),
                     parse_mode="HTML",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar ao Início", callback_data="voltar_inicio")]])
                 )
@@ -1284,15 +1326,17 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if item.get("qtd", 1) <= 0 or item.get("vendido"):
                 await query.answer("❌ Estoque esgotado!", show_alert=True)
             elif saldo_atual < item["preco"]:
+                preco_fmt = f"{item['preco']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                saldo_fmt = f"{saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
                         f"🔹 <b>CASABLANCA SHOP | SALDO INSUFICIENTE</b> 🔹\n\n"
                         f"❌ Saldo insuficiente para adquirir o E-SIM <b>{item['nome']}</b>!\n\n"
-                        f"🏷️ <b>Preço:</b> R$ {item['preco']:,.2f}\n"
-                        f"💰 <b>Seu Saldo:</b> R$ {saldo_atual:,.2f}\n\n"
+                        f"🏷️ <b>Preço:</b> R$ {preco_fmt}\n"
+                        f"💰 <b>Seu Saldo:</b> R$ {saldo_fmt}\n\n"
                         f"Adicione saldo digitando no chat: <code>/pix {int(item['preco'])}</code>"
-                    ).replace(",", "X").replace(".", ",").replace("X", "."),
+                    ),
                     parse_mode="HTML"
                 )
             else:
@@ -1303,6 +1347,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     item["vendido"] = True
 
+                novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
@@ -1310,8 +1355,8 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"Produto: <b>{item['nome']}</b>\n"
                         f"Detalhes: {item.get('descricao', 'Conexão imediata')}\n"
                         f"Valor: R$ {item['preco']:.2f}\n\n"
-                        f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}"
-                    ).replace(",", "X").replace(".", ",").replace("X", "."),
+                        f"Novo Saldo: R$ {novo_saldo_fmt}"
+                    ),
                     parse_mode="HTML",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar", callback_data="esim")]])
                 )
@@ -1332,20 +1377,23 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if item.get("vendido"):
                 await query.answer("❌ Este item já foi vendido!", show_alert=True)
             elif saldo_atual < item["preco"]:
+                preco_fmt = f"{item['preco']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                saldo_fmt = f"{saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
                         f"🔹 <b>CASABLANCA SHOP | SALDO INSUFICIENTE</b> 🔹\n\n"
                         f"❌ Saldo insuficiente para adquirir a LARA <b>{item['nome']}</b>!\n\n"
-                        f"🏷️ <b>Preço:</b> R$ {item['preco']:,.2f}\n"
-                        f"💰 <b>Seu Saldo:</b> R$ {saldo_atual:,.2f}\n\n"
+                        f"🏷️ <b>Preço:</b> R$ {preco_fmt}\n"
+                        f"💰 <b>Seu Saldo:</b> R$ {saldo_fmt}\n\n"
                         f"Adicione saldo digitando no chat: <code>/pix {int(item['preco'])}</code>"
-                    ).replace(",", "X").replace(".", ",").replace("X", "."),
+                    ),
                     parse_mode="HTML"
                 )
             else:
                 SALDO_USUARIOS[user_id] -= item["preco"]
                 item["vendido"] = True
+                novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
@@ -1356,8 +1404,8 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"Score Serasa: <code>{item.get('score_serasa', 750)}</code>\n"
                         f"Score BC: <code>{item.get('score_bc', 800)}</code>\n"
                         f"Gateway: {item.get('descricao', 'VOLTPIX')}\n\n"
-                        f"Novo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}"
-                    ).replace(",", "X").replace(".", ",").replace("X", "."),
+                        f"Novo Saldo: R$ {novo_saldo_fmt}"
+                    ),
                     parse_mode="HTML",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar", callback_data="laras")]])
                 )
@@ -1381,9 +1429,10 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 SALDO_USUARIOS[user_id] -= item["preco"]
                 item["vendido"] = True
+                novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"🎉 <b>CONSULTÁVEL ADQUIRIDO COM SUCESSO!</b>\n\nProduto: <b>{item['nome']}</b>\nDetalhes: {item['descricao']}\n\nNovo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
+                    text=f"🎉 <b>CONSULTÁVEL ADQUIRIDO COM SUCESSO!</b>\n\nProduto: <b>{item['nome']}</b>\nDetalhes: {item['descricao']}\n\nNovo Saldo: R$ {novo_saldo_fmt}",
                     parse_mode="HTML"
                 )
 
@@ -1405,9 +1454,10 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 SALDO_USUARIOS[user_id] -= item["preco"]
                 item["vendido"] = True
+                novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"🎉 <b>LOGIN ADQUIRIDO COM SUCESSO!</b>\n\nProduto: <b>{item['nome']}</b>\nDetalhes: {item['descricao']}\n\nNovo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
+                    text=f"🎉 <b>LOGIN ADQUIRIDO COM SUCESSO!</b>\n\nProduto: <b>{item['nome']}</b>\nDetalhes: {item['descricao']}\n\nNovo Saldo: R$ {novo_saldo_fmt}",
                     parse_mode="HTML"
                 )
 
@@ -1429,9 +1479,10 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 SALDO_USUARIOS[user_id] -= item["preco"]
                 item["vendido"] = True
+                novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"🎉 <b>CC AUXILIAR ADQUIRIDO COM SUCESSO!</b>\n\nProduto: <b>{item['nome']}</b>\nDetalhes: {item['descricao']}\n\nNovo Saldo: R$ {SALDO_USUARIOS[user_id]:,.2f}",
+                    text=f"🎉 <b>CC AUXILIAR ADQUIRIDO COM SUCESSO!</b>\n\nProduto: <b>{item['nome']}</b>\nDetalhes: {item['descricao']}\n\nNovo Saldo: R$ {novo_saldo_fmt}",
                     parse_mode="HTML"
                 )
 
@@ -1446,7 +1497,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await enviar_menu_principal(update, context)
 
 # ==============================================================================
-# FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM)
+# FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM) - LOTE E DINÂMICO
 # ==============================================================================
 async def add_estoque(update, context):
     user_id = update.effective_user.id
@@ -1458,57 +1509,102 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
-    try:
-        global DADOS_CARTOES
+    # Remover o comando da string
+    texto_bruto = re.sub(r"^/add_estoque_ccfullldados\s*", "", texto_bruto, flags=re.IGNORECASE)
+    texto_bruto = re.sub(r"^/add_estoque\s*", "", texto_bruto, flags=re.IGNORECASE)
+    
+    # Suporte a múltiplos produtos divididos por "=== ESTOQUE ==="
+    blocos = [b.strip() for b in texto_bruto.split("=== ESTOQUE ===") if b.strip()]
+    
+    if not blocos:
+        # Fallback: Tenta ler como um único bloco se não tiver o delimitador
+        if "Número do Cartão" in texto_bruto:
+            blocos = [texto_bruto.strip()]
+        else:
+            return await update.message.reply_text("❌ Nenhum dado encontrado. Envie a ficha correta dividida por '=== ESTOQUE ===' ou apenas uma ficha completa.")
 
-        cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", texto_bruto)
-        banco_match = re.search(r"Banco:\s*([^\n]+)", texto_bruto)
-        nivel_match = re.search(r"Categoria:\s*([^\n]+)", texto_bruto)
-        tipo_match = re.search(r"Tipo:\s*([^\n]+)", texto_bruto)
-        nome_match = re.search(r"Nome:\s*([^\n]+)", texto_bruto)
-        cpf_match = re.search(r"CPF:\s*([^\n]+)", texto_bruto)
-        preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", texto_bruto)
-        saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", texto_bruto)
+    total_recebido = len(blocos)
+    adicionados = 0
+    com_erro = 0
+    erros_detalhes = []
+    
+    global DADOS_CARTOES
+    global CATALOGO_UNITARIAS
 
-        tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", texto_bruto)
-        categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
+    for idx, bloco in enumerate(blocos, start=1):
+        try:
+            cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", bloco)
+            banco_match = re.search(r"Banco:\s*([^\n]+)", bloco)
+            nivel_match = re.search(r"Categoria:\s*([^\n]+)", bloco)
+            tipo_match = re.search(r"Tipo:\s*([^\n]+)", bloco)
+            nome_match = re.search(r"Nome:\s*([^\n]+)", bloco)
+            cpf_match = re.search(r"CPF:\s*([^\n]+)", bloco)
+            preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", bloco)
+            saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", bloco)
 
-        if not cartao_match:
-            return await update.message.reply_text("❌ Não foi possível identificar o 'Número do Cartão' na ficha enviada.")
+            # Para capturar a categoria corretamente (evitar conflito de chaves se aparecer duas vezes)
+            tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", bloco)
+            categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
 
-        preco_val = float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0
-        saldo_val = float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0
+            if not cartao_match:
+                com_erro += 1
+                erros_detalhes.append(f"• Estoque #{idx}: campo 'Número do Cartão' ausente")
+                continue
 
-        card_raw = {
-            "id": f"card_{len(DADOS_CARTOES) + 1}",
-            "cc": cartao_match.group(1).strip(),
-            "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
-            "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
-            "categoria_produto": categoria_final,
-            "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
-            "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
-            "cpf": cpf_match.group(1).strip() if cpf_match else "",
-            "preco": preco_val,
-            "saldo_minimo": saldo_val,
-            "vendido": False
-        }
+            preco_val = float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0
+            saldo_val = float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0
 
-        item_processado = edificar_item_estoque(card_raw)
-        DADOS_CARTOES.append(item_processado)
+            card_raw = {
+                "id": f"card_{len(DADOS_CARTOES) + 1}_{random.randint(1000,9999)}",
+                "cc": cartao_match.group(1).strip(),
+                "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
+                "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
+                "categoria_produto": categoria_final,
+                "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
+                "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
+                "cpf": cpf_match.group(1).strip() if cpf_match else "",
+                "preco": preco_val,
+                "saldo_minimo": saldo_val,
+                "vendido": False
+            }
 
-        await update.message.reply_text(
-            f"✅ **Item Processado e Adicionado!**\n\n"
-            f"• **BIN:** `{item_processado['bin']}`\n"
-            f"• **Banco:** {item_processado['banco']}\n"
-            f"• **Bandeira:** {item_processado['bandeira']}\n"
-            f"• **Nível:** {item_processado['nivel_formatado']}\n"
-            f"• **Preço:** R$ {item_processado['preco']:.2f}\n"
-            f"• **Cartão Mascarado:** `{item_processado['cc_mascarado']}`",
-            parse_mode="Markdown"
-        )
+            item_processado = edificar_item_estoque(card_raw)
+            DADOS_CARTOES.append(item_processado)
 
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
+            # --- ATUALIZA O CATÁLOGO DE UNITÁRIAS DINAMICAMENTE PARA OS BOTÕES INLINE ---
+            categoria_upper = categoria_final.upper()
+            unit_encontrada = next((u for u in CATALOGO_UNITARIAS if u["nome"].upper() == categoria_upper and u["preco"] == preco_val), None)
+            
+            if unit_encontrada:
+                unit_encontrada["qtd"] += 1
+            else:
+                CATALOGO_UNITARIAS.append({
+                    "id": f"unit_{len(CATALOGO_UNITARIAS)}_{random.randint(100,999)}",
+                    "nome": categoria_upper,
+                    "preco": preco_val,
+                    "qtd": 1
+                })
+
+            adicionados += 1
+
+        except Exception as e:
+            com_erro += 1
+            erros_detalhes.append(f"• Estoque #{idx}: Erro interno ({str(e)})")
+
+    # Limitador de caracteres para não estourar a resposta do Telegram
+    erros_str = "\n".join(erros_detalhes) if erros_detalhes else "Nenhum erro."
+    if len(erros_str) > 3000: 
+        erros_str = erros_str[:3000] + "\n... e mais erros omitidos."
+        
+    resumo = (
+        f"☑ <b>Estoque processado com sucesso!</b>\n\n"
+        f"Total recebido: {total_recebido}\n"
+        f"✅ Adicionados: {adicionados}\n"
+        f"❌ Com erro: {com_erro}\n\n"
+        f"<b>Erros Detalhados:</b>\n{erros_str}"
+    )
+    
+    await update.message.reply_text(resumo, parse_mode="HTML")
 
 # --- REGISTRO DE HANDLERS ---
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
@@ -1575,10 +1671,11 @@ async def misticpay_webhook(request: Request):
                 except Exception:
                     pass
 
+            valor_fmt = f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             texto_sucesso = (
                 f"🔹 <b>CASABLANCA SHOP | PAGAMENTO CONFIRMADO</b> 🔹\n\n"
-                f"Foi creditado <b>R$ {value:,.2f}</b> na sua conta."
-            ).replace(",", "X").replace(".", ",").replace("X", ".")
+                f"Foi creditado <b>R$ {valor_fmt}</b> na sua conta."
+            )
 
             await telegram_app.bot.send_message(chat_id=user_id, text=texto_sucesso, parse_mode="HTML")
 
