@@ -62,6 +62,7 @@ INDICACOES_USUARIOS = {} # {user_id: referrer_id}
 TOTAL_INDICADOS = {}     # {user_id: count}
 USUARIOS_REGISTRADOS = set()
 KEYS_GERADAS = {}        # {codigo: dados}
+PREVIEW_NOTIFICACAO = {} # Nova variável global para a IA do notificar
 
 # --- CATÁLOGOS DINÂMICOS ---
 CATALOGO_FERRAMENTAS = [
@@ -223,6 +224,8 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "banco": banco_auto,
         "bandeira": bandeira_auto,
         "categoria": card_raw.get("categoria", "STANDARD"),
+        # Categoria Produto salva a real para separar certinho nos catálogos
+        "categoria_produto": card_raw.get("categoria_produto", card_raw.get("categoria", "STANDARD")).upper(),
         "nivel_formatado": nivel_auto,
         "tipo": card_raw.get("tipo", "CREDIT").upper(),
         "nome": card_raw.get("nome", "NÃO INFORMADO").upper(),
@@ -239,7 +242,7 @@ ESTOQUE_BRUTO = [
     {
         "id": "card_1",
         "cc": "542819******0150|08|2028|306",
-        "categoria": "FULL PLATINUM",
+        "categoria": "PLATINUM",
         "tipo": "CREDIT",
         "nome": "CRISTIANO CACHEIRO MAHIA",
         "cpf": "03250698679",
@@ -268,12 +271,8 @@ ESTOQUE_BRUTO = [
 
 DADOS_CARTOES = [edificar_item_estoque(item) for item in ESTOQUE_BRUTO]
 
-CATALOGO_UNITARIAS = [
-    {"id": "unit_0", "nome": "PLATINUM", "preco": 80.0, "qtd": 525},
-    {"id": "unit_1", "nome": "PERSONAL", "preco": 50.0, "qtd": 55},
-    {"id": "unit_2", "nome": "GOLD", "preco": 50.0, "qtd": 174},
-    {"id": "unit_3", "nome": "ELO", "preco": 50.0, "qtd": 1},
-]
+# Esvaziado para ler em Tempo Real do banco de DADOS_CARTOES acima (Correção Bug 1)
+CATALOGO_UNITARIAS = []
 
 # ==============================================================================
 # FUNÇÕES DE NAVEGAÇÃO E PAGINAÇÃO
@@ -395,7 +394,7 @@ async def comando_resgatar_key(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(mensagem)
 
 # ==============================================================================
-# NOTIFICAÇÃO GLOBAL E GERENCIAMENTO DE REMOÇÃO
+# NOTIFICAÇÃO GLOBAL (Atualizada para IA Funcionalidade Nova)
 # ==============================================================================
 
 async def comando_notificar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -403,45 +402,34 @@ async def comando_notificar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in ADMIN_IDS and user_id != ADMIN_ID:
         return await update.message.reply_text("🚫 Acesso negado.")
 
-    sucesso = 0
-    falha = 0
-
-    # Funcionalidade 1: Se for resposta a uma mensagem existente, replica a mensagem fielmente
+    # Verifica se é reply para salvar no cache
     if update.message.reply_to_message:
-        for uid in list(USUARIOS_REGISTRADOS):
-            try:
-                await update.message.reply_to_message.copy(chat_id=uid)
-                sucesso += 1
-            except Exception:
-                falha += 1
-        return await update.message.reply_text(f"📢 <b>Notificação enviada!</b>\n\n✅ Enviados: {sucesso}\n❌ Falhas: {falha}", parse_mode="HTML")
+        PREVIEW_NOTIFICACAO[user_id] = {"tipo": "reply", "msg_obj": update.message.reply_to_message}
+    else:
+        html_text = update.message.caption_html if update.message.photo else update.message.text_html
+        html_text = html_text or ""
+        html_text = re.sub(r"^/notificar\s*", "", html_text, flags=re.IGNORECASE).strip()
 
-    # Funcionalidade 2: Trata fotos e textos HTML de uma única mensagem com formatação
-    html_text = update.message.caption_html if update.message.photo else update.message.text_html
-    html_text = html_text or ""
+        if not html_text and not update.message.photo:
+            return await update.message.reply_text("⚠️ Envie a mensagem após o comando (com ou sem foto) ou responda a uma mensagem com /notificar.", parse_mode="HTML")
+
+        photo_id = update.message.photo[-1].file_id if update.message.photo else None
+        PREVIEW_NOTIFICACAO[user_id] = {"tipo": "direto", "texto": html_text, "foto": photo_id}
+
+    keyboard = [
+        [InlineKeyboardButton("✅ Confirmar Postagem", callback_data="conf_notif")],
+        [InlineKeyboardButton("✏️ Editar / Cancelar", callback_data="canc_notif")]
+    ]
     
-    # Remove o prefixo do comando mantendo perfeitamente negritos, emojis e emojis premiums
-    html_text = re.sub(r"^/notificar\s*", "", html_text, flags=re.IGNORECASE).strip()
-
-    if not html_text and not update.message.photo:
-        return await update.message.reply_text("⚠️ Envie a mensagem após o comando (com ou sem foto) ou responda a uma mensagem com /notificar.", parse_mode="HTML")
-
-    for uid in list(USUARIOS_REGISTRADOS):
-        try:
-            if update.message.photo:
-                await context.bot.send_photo(
-                    chat_id=uid,
-                    photo=update.message.photo[-1].file_id,
-                    caption=html_text,
-                    parse_mode="HTML"
-                )
-            else:
-                await context.bot.send_message(chat_id=uid, text=html_text, parse_mode="HTML")
-            sucesso += 1
-        except Exception:
-            falha += 1
-
-    await update.message.reply_text(f"📢 <b>Notificação enviada!</b>\n\n✅ Enviados: {sucesso}\n❌ Falhas: {falha}", parse_mode="HTML")
+    await update.message.reply_text("👀 <b>PRÉVIA DA MENSAGEM GERADA PELA IA:</b>\nVerifique como ficou e escolha uma opção abaixo:", parse_mode="HTML")
+    
+    if PREVIEW_NOTIFICACAO[user_id]["tipo"] == "reply":
+        await PREVIEW_NOTIFICACAO[user_id]["msg_obj"].copy(chat_id=user_id, reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        if PREVIEW_NOTIFICACAO[user_id]["foto"]:
+            await context.bot.send_photo(chat_id=user_id, photo=PREVIEW_NOTIFICACAO[user_id]["foto"], caption=PREVIEW_NOTIFICACAO[user_id]["texto"], parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await context.bot.send_message(chat_id=user_id, text=PREVIEW_NOTIFICACAO[user_id]["texto"], parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def comando_remover_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -529,7 +517,7 @@ async def painel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "<code>/add_estoque_ccauxiliar</code> - Add CC Auxiliar\n\n"
         "<b>Outros Comandos:</b>\n"
         "<code>/gerar_key</code> - Gerar Key de Resgate\n"
-        "<code>/notificar</code> - Mandar mensagem geral\n"
+        "<code>/notificar</code> - Mandar mensagem geral (Com Prévia IA)\n"
         "<code>/remover_estoque</code> - Menu interativo de remoção"
     )
     await update.message.reply_text(texto, parse_mode="HTML")
@@ -980,8 +968,7 @@ def montar_texto_cartao_unitario(item: dict) -> str:
         f"Score BC: <code>{item['score_bc']}</code>\n\n"
         f"<b>Saldo mínimo garantido: R$ {saldo_fmt}</b>\n"
         f"Se o saldo for menor que isso, você pode solicitar reembolso conforme a <b>Política de Reembolso</b>.\n\n"
-        f"Valor da Compra: R$ {preco_fmt}\n\n"
-        f"Fornecedor: <i>{item['fornecedor']}</i>"
+        f"Valor da Compra: R$ {preco_fmt}"
     )
 
 async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -996,8 +983,39 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = query.message.chat_id
     saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
 
+    # --- CALLBACKS DA NOVA FERRAMENTA DE NOTIFICAÇÃO ---
+    if data == "conf_notif":
+        if user_id not in PREVIEW_NOTIFICACAO:
+            return await query.message.edit_text("❌ Sessão expirada.", parse_mode="HTML")
+            
+        dados = PREVIEW_NOTIFICACAO[user_id]
+        sucesso = 0
+        falha = 0
+        
+        await query.message.edit_text("⏳ Disparando mensagens, aguarde...", parse_mode="HTML")
+        
+        for uid in list(USUARIOS_REGISTRADOS):
+            try:
+                if dados["tipo"] == "reply":
+                    await dados["msg_obj"].copy(chat_id=uid)
+                else:
+                    if dados["foto"]:
+                        await context.bot.send_photo(chat_id=uid, photo=dados["foto"], caption=dados["texto"], parse_mode="HTML")
+                    else:
+                        await context.bot.send_message(chat_id=uid, text=dados["texto"], parse_mode="HTML")
+                sucesso += 1
+            except Exception:
+                falha += 1
+                
+        await query.message.edit_text(f"📢 <b>Notificação enviada com sucesso!</b>\n\n✅ Enviados: {sucesso}\n❌ Falhas: {falha}", parse_mode="HTML")
+        PREVIEW_NOTIFICACAO.pop(user_id, None)
+
+    elif data == "canc_notif":
+        PREVIEW_NOTIFICACAO.pop(user_id, None)
+        await query.message.edit_text("❌ Notificação cancelada. O texto e a imagem foram descartados.", parse_mode="HTML")
+
     # --- CALLBACKS DE REMOÇÃO DE ESTOQUE ---
-    if data.startswith("rem_page_"):
+    elif data.startswith("rem_page_"):
         page = int(data.replace("rem_page_", ""))
         await exibir_painel_remocao(query, context, page=page)
 
@@ -1119,25 +1137,71 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         texto = f"🔹 <b>CASABLANCA SHOP | CC FULL DADOS</b> 🔹\n\nInformações:\n- Saldo: R$ {saldo_fmt}"
         await responder_ou_editar(query, texto, InlineKeyboardMarkup(keyboard))
 
+    # --- CORREÇÃO BUG 1 & 2: LEITURA DINÂMICA REAL DOS CARTÕES ---
     elif data == "ver_unitarias":
+        estoque_agrupado = {}
+        for c in DADOS_CARTOES:
+            if not c.get("vendido"):
+                # Agrupa pela categoria exata que foi mandada
+                cat = c.get("categoria_produto", "STANDARD").upper()
+                preco = c.get("preco", 80.0)
+                chave = (cat, preco)
+                if chave not in estoque_agrupado:
+                    estoque_agrupado[chave] = 0
+                estoque_agrupado[chave] += 1
+
         keyboard = []
-        for item in CATALOGO_UNITARIAS:
-            keyboard.append([InlineKeyboardButton(f"R$ {item['preco']:.0f} {item['nome']} ({item['qtd']})", callback_data=f"show_u_{item['id']}")])
+        for (cat, preco), qtd in estoque_agrupado.items():
+            # Botão vai direcionar para a nova navegação de paginas indexada por 0
+            keyboard.append([InlineKeyboardButton(f"R$ {preco:.0f} {cat} ({qtd})", callback_data=f"nav_cat_{cat}_0")])
+            
+        if not keyboard:
+            keyboard.append([InlineKeyboardButton("❌ Sem Estoque no Momento", callback_data="voltar_cc_full")])
+            
         keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="voltar_cc_full")])
         await responder_ou_editar(query, POLITICA_REEMBOLSO, InlineKeyboardMarkup(keyboard))
 
-    elif data.startswith("show_u_"):
-        unit_id = data.replace("show_u_", "")
-        cartoes_validos = [c for c in DADOS_CARTOES if not c["vendido"]]
+    # --- CORREÇÃO BUG 3: NAVEGAÇÃO ENTRE OS CARTÕES DA CATEGORIA ---
+    elif data.startswith("nav_cat_"):
+        # Extrair a categoria e o index (ex: nav_cat_PLATINUM_0)
+        partes = data.replace("nav_cat_", "").rsplit("_", 1)
+        cat_alvo = partes[0]
+        idx = int(partes[1])
+
+        # Filtrar cartoes da mesma categoria que nao estao vendidos
+        cartoes_validos = [c for c in DADOS_CARTOES if not c.get("vendido") and c.get("categoria_produto", "STANDARD").upper() == cat_alvo]
+
         if not cartoes_validos:
-            await query.message.reply_text("🔹 <b>CASABLANCA SHOP</b> 🔹\n\n❌ Estoque temporariamente esgotado!", parse_mode="HTML")
-            return
-        card = cartoes_validos[0]
+            await query.answer("❌ Categoria sem estoque no momento!", show_alert=True)
+            # Redireciona de volta para o painel de Unitárias
+            return await botao_callback(Update(update.update_id, callback_query=type('obj', (object,), {'answer': query.answer, 'data': 'ver_unitarias', 'from_user': query.from_user, 'message': query.message})()), context)
+
+        # Ajuste de borda (caso apague/compre e o index estoure)
+        if idx < 0: idx = 0
+        if idx >= len(cartoes_validos): idx = len(cartoes_validos) - 1
+
+        card = cartoes_validos[idx]
         texto_card = montar_texto_cartao_unitario(card)
+        
+        # Inserindo o "Cartão X de Y" igual o da foto
+        texto_card += f"\n\n<i>Cartão {idx + 1} de {len(cartoes_validos)}</i>"
+
         keyboard = [
-            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{card['id']}")],
-            [InlineKeyboardButton("❌ Cancelar", callback_data="ver_unitarias")],
+            [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{card['id']}")]
         ]
+
+        # Botões de Anterior e Próximo (idêntico ao sistema da imagem)
+        nav_buttons = []
+        if idx > 0:
+            nav_buttons.append(InlineKeyboardButton("⬅️ Anterior", callback_data=f"nav_cat_{cat_alvo}_{idx - 1}"))
+        if idx < len(cartoes_validos) - 1:
+            nav_buttons.append(InlineKeyboardButton("Próximo ➡️", callback_data=f"nav_cat_{cat_alvo}_{idx + 1}"))
+        
+        if nav_buttons:
+            keyboard.append(nav_buttons)
+
+        keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="ver_unitarias")])
+
         await responder_ou_editar(query, texto_card, InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("buy_card_"):
@@ -1529,7 +1593,6 @@ async def add_estoque(update, context):
     erros_detalhes = []
     
     global DADOS_CARTOES
-    global CATALOGO_UNITARIAS
 
     for idx, bloco in enumerate(blocos, start=1):
         try:
@@ -1570,21 +1633,7 @@ async def add_estoque(update, context):
 
             item_processado = edificar_item_estoque(card_raw)
             DADOS_CARTOES.append(item_processado)
-
-            # --- ATUALIZA O CATÁLOGO DE UNITÁRIAS DINAMICAMENTE PARA OS BOTÕES INLINE ---
-            categoria_upper = categoria_final.upper()
-            unit_encontrada = next((u for u in CATALOGO_UNITARIAS if u["nome"].upper() == categoria_upper and u["preco"] == preco_val), None)
             
-            if unit_encontrada:
-                unit_encontrada["qtd"] += 1
-            else:
-                CATALOGO_UNITARIAS.append({
-                    "id": f"unit_{len(CATALOGO_UNITARIAS)}_{random.randint(100,999)}",
-                    "nome": categoria_upper,
-                    "preco": preco_val,
-                    "qtd": 1
-                })
-
             adicionados += 1
 
         except Exception as e:
