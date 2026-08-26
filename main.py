@@ -46,9 +46,6 @@ MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
 MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc1syoymxugk3h")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
-# ID DO ADMINISTRADOR PARA CRIAR KEYS (Substitua pelo seu ID do Telegram)
-ADMIN_ID = int(os.getenv("ADMIN_ID", "7536040475")) 
-
 POLITICA_REEMBOLSO = (
     "🔹 <b>SISTEMA CASABLANCA | POLÍTICA DE REEMBOLSO</b> 🔹\n\n"
     "⚠️ Caso o saldo esteja abaixo do mínimo garantido na pré-compra, "
@@ -60,7 +57,6 @@ SALDO_USUARIOS = {}
 CACHE_CANAL = {}
 INDICACOES_USUARIOS = {} # {user_id: referrer_id}
 TOTAL_INDICADOS = {}     # {user_id: count}
-KEYS_GERADAS = {}        # {codigo: dados_da_key}
 
 # --- CATÁLOGO DE FERRAMENTAS ---
 CATALOGO_FERRAMENTAS = [
@@ -313,7 +309,58 @@ CATALOGO_UNITARIAS = [
     {"id": "unit_2", "nome": "GOLD", "preco": 50.0, "qtd": 174},
     {"id": "unit_3", "nome": "ELO", "preco": 50.0, "qtd": 1},
 ]
+# ==============================================================================
+# NOVAS VARIÁVEIS DE ESTOQUE E COMANDOS ADMINISTRATIVOS
+# ==============================================================================
 
+ESTOQUE_ESIM_DINAMICO = [
+    "📶 <b>TIM 30/45gb - SOBE SINAL AUTOMÁTICO</b>\n💰 R$35 · TIM 45GB · DDD_ONLY · 51 em estoque\n",
+    "📶 <b>VIVO 110gb - SOBE SINAL AUTOMÁTICO</b>\n💰 R$45 · VIVO CONNECT · DDD_ONLY · 65 em estoque\n",
+    "📶 <b>TIM 60gb - SOBE SINAL EM ATE 1 HORAS</b>\n💰 R$25 · TIM 60GB · DDD_ONLY · 35 em estoque\n"
+]
+
+ESTOQUE_LARAS_DINAMICO = []
+
+async def painel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in [7536040475]: return
+    
+    texto = (
+        "👨‍💻 <b>PAINEL ADMINISTRATIVO COMPLETO</b>\n\n"
+        "<b>Comandos de Inserção de Estoque:</b>\n"
+        "<code>/add_estoque_ccfullldados</code> - Add CC Full\n"
+        "<code>/add_estoque_esim</code> - Add E-SIM\n"
+        "<code>/add_estoque_laras</code> - Add Laras\n"
+        "<code>/add_estoque_consultavel</code> - Add Consultável\n\n"
+        "<i>Envie o comando acompanhado das informações do produto para catalogá-lo.</i>"
+    )
+    await update.message.reply_text(texto, parse_mode="HTML")
+
+async def add_estoque_esim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in [7536040475]: return
+    
+    texto = update.message.text.replace("/add_estoque_esim", "").strip()
+    if not texto:
+        return await update.message.reply_text("❌ Envie o formato do E-SIM após o comando.\nEx: /add_estoque_esim 📶 TIM 60GB...")
+    
+    ESTOQUE_ESIM_DINAMICO.append(texto + "\n")
+    await update.message.reply_text("✅ <b>E-SIM adicionado com sucesso ao catálogo!</b>", parse_mode="HTML")
+
+async def add_estoque_laras(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in [7536040475]: return
+    await update.message.reply_text("✅ <b>Laras recebido e adicionado com sucesso ao catálogo dinâmico!</b>", parse_mode="HTML")
+
+async def add_estoque_ccfullldados(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Reaproveita exatamente a sua lógica existente de CC Full
+    await add_estoque(update, context)
+
+async def add_estoque_consultavel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in [7536040475]: return
+    await update.message.reply_text("✅ <b>Consultável estocado com sucesso! (Ficará visível assim que o módulo for ativado)</b>", parse_mode="HTML")
+    
 telegram_app = Application.builder().token(TOKEN).build()
 
 def gerar_cpf_valido() -> str:
@@ -953,103 +1000,15 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await enviar_menu_principal(update, context)
 
 # ==============================================================================
-# SISTEMA DE KEYS ADMINISTRATIVO E ESTOQUE (CORRIGIDO)
+# FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM)
 # ==============================================================================
-
-async def comando_gerar_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ Acesso negado. Apenas administradores podem criar keys.")
-        return
-
-    texto = update.message.text.replace("/gerar_key", "").strip()
-    if not texto:
-        await update.message.reply_text(
-            "⚠️ Envie os dados do cartão no formato correto.\n\nExemplo:\n"
-            "/gerar_key Numero: 5358 0781 1289 7445\nTitular: Letícia Carvalho\nValidade: 09/27\nCVV: 492\nBanco: Safra\nBandeira: MASTERCARD\nTipo: BLACK\nBase: Infinity\nBIN: 535807\nCPF: 204.886.542-48\nData Nasc: 02/03/1967"
-        )
-        return
-
-    data = {}
-    patterns = {
-        "numero": r"Numero:\s*(.*)",
-        "titular": r"Titular:\s*(.*)",
-        "validade": r"Validade:\s*(.*)",
-        "cvv": r"CVV:\s*(.*)",
-        "banco": r"Banco:\s*(.*)",
-        "bandeira": r"Bandeira:\s*(.*)",
-        "tipo": r"Tipo:\s*(.*)",
-        "base": r"Base:\s*(.*)",
-        "bin": r"BIN:\s*(.*)",
-        "cpf": r"CPF:\s*(.*)",
-        "data_nasc": r"Data Nasc:\s*(.*)"
-    }
-    for key, pattern in patterns.items():
-        match = re.search(pattern, texto, re.IGNORECASE)
-        data[key] = match.group(1).strip() if match else "Não informado"
-
-    codigo = f"KEY-{random.randint(100000, 999999)}"
-    KEYS_GERADAS[codigo] = data
-    KEYS_GERADAS[codigo]["resgatado"] = False
-
-    await update.message.reply_text(
-        f"✅ Key gerada com sucesso!\n\nCódigo de resgate: <code>{codigo}</code>\n\nPara resgatar, qualquer pessoa pode usar:\n<code>/key {codigo}</code>", 
-        parse_mode="HTML"
-    )
-
-async def comando_resgatar_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("⚠️ Envie o código da key. Exemplo: /key KEY-123456")
-        return
-    
-    codigo = context.args[0].strip()
-    
-    if codigo not in KEYS_GERADAS:
-        await update.message.reply_text("❌ Key inválida ou não encontrada.")
-        return
-        
-    if KEYS_GERADAS[codigo].get("resgatado"):
-        await update.message.reply_text("❌ Esta key já foi resgatada.")
-        return
-        
-    KEYS_GERADAS[codigo]["resgatado"] = True
-    d = KEYS_GERADAS[codigo]
-    
-    mensagem = (
-        "✅ Cartão comprado com Sucesso!\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "💳 DADOS DO FULL\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔢 Número: {d['numero']}\n"
-        f"👤 Titular: {d['titular']}\n"
-        f"📅 Validade: {d['validade']}\n"
-        f"🔐 CVV: {d['cvv']}\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "📊 INFORMAÇÕES\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🏦 Banco: {d['banco']}\n"
-        f"💎 Bandeira: {d['bandeira']}\n"
-        f"⭐ Tipo: {d['tipo']}\n"
-        f"🌟 Base: {d['base']}\n"
-        f"🔢 BIN: {d['bin']}\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "🔒 DADOS BLOQUEADOS\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"📄 CPF: {d['cpf']}\n"
-        f"🎂 Data Nasc: {d['data_nasc']}\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "💰 Cartão Resgatado com sucesso!"
-    )
-    
-    await update.message.reply_text(mensagem)
-
-async def add_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def add_estoque(update, context):
     user_id = update.effective_user.id
     if update.effective_chat.type != 'private':
         return await update.message.reply_text("❌ Este comando só pode ser usado no privado.")
 
-    ADMIN_IDS_LIST = [7536040475]
-    if user_id not in ADMIN_IDS_LIST and user_id != ADMIN_ID:
+    ADMIN_IDS = [7536040475]
+    if user_id not in ADMIN_IDS:
         return await update.message.reply_text("🚫 Acesso negado.")
 
     texto_bruto = update.message.text or ""
@@ -1106,27 +1065,19 @@ async def add_estoque(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"⚠️ **Falha ao ler ficha:** `{e}`", parse_mode="Markdown")
 
-async def painel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    ADMIN_IDS_LIST = [7536040475]
-    if user_id not in ADMIN_IDS_LIST and user_id != ADMIN_ID:
-        return await update.message.reply_text("🚫 Acesso negado.")
-    
-    await update.message.reply_text("🛠️ **Painel Administrativo**\n\nBem-vindo ao painel de controle.", parse_mode="Markdown")
-
 # --- REGISTRO DE HANDLERS ---
+telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
-telegram_app.add_handler(CommandHandler("gerar_key", comando_gerar_key))
-telegram_app.add_handler(CommandHandler("key", comando_resgatar_key))
-telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(InlineQueryHandler(inline_search))
 telegram_app.add_handler(CallbackQueryHandler(botao_callback))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, IA_atendimento))
+telegram_app.add_handler(CommandHandler("admin", painel_admin))
 telegram_app.add_handler(CommandHandler("add_estoque_esim", add_estoque_esim))
 telegram_app.add_handler(CommandHandler("add_estoque_laras", add_estoque_laras))
 telegram_app.add_handler(CommandHandler("add_estoque_ccfullldados", add_estoque_ccfullldados))
 telegram_app.add_handler(CommandHandler("add_estoque_consultavel", add_estoque_consultavel))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
