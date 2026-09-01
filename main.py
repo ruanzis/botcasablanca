@@ -62,8 +62,8 @@ INDICACOES_USUARIOS = {} # {user_id: referrer_id}
 TOTAL_INDICADOS = {}     # {user_id: count}
 USUARIOS_REGISTRADOS = set()
 KEYS_GERADAS = {}        # {codigo: dados}
-GIFTS_GERADOS = {}       # Nova funcionalidade de Gifts {codigo: {"valor": float, "qtd": int}}
-PREVIEW_NOTIFICACAO = {} # Nova variável global para a IA do notificar
+GIFTS_GERADOS = {}       # NOVA FUNCIONALIDADE: {codigo: dados_gift}
+PREVIEW_NOTIFICACAO = {} # Variável global para a IA do notificar
 
 # --- CATÁLOGOS DINÂMICOS ---
 CATALOGO_FERRAMENTAS = [
@@ -207,6 +207,14 @@ def identificar_nivel(categoria_raw: str) -> str:
         return "PLATINUM"
     elif "GOLD" in cat or "OURO" in cat:
         return "GOLD"
+    elif "STANDARD" in cat:
+        return "STANDARD"
+    elif "CLASSIC" in cat:
+        return "CLASSIC"
+    elif "BUSINESS" in cat:
+        return "BUSINESS"
+    elif "ELO" in cat:
+        return "ELO"
     else:
         return cat if cat else "STANDARD"
 
@@ -225,7 +233,6 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "banco": banco_auto,
         "bandeira": bandeira_auto,
         "categoria": card_raw.get("categoria", "STANDARD"),
-        # Categoria Produto salva a real para separar certinho nos catálogos
         "categoria_produto": card_raw.get("categoria_produto", card_raw.get("categoria", "STANDARD")).upper(),
         "nivel_formatado": nivel_auto,
         "tipo": card_raw.get("tipo", "CREDIT").upper(),
@@ -243,43 +250,29 @@ ESTOQUE_BRUTO = [
     {
         "id": "card_1",
         "cc": "542819******0150|08|2028|306",
-        "categoria": "GOLD",
+        "categoria": "PLATINUM",
         "tipo": "CREDIT",
         "nome": "CRISTIANO CACHEIRO MAHIA",
         "cpf": "03250698679",
         "score_serasa": 496,
         "score_bc": 352,
         "fornecedor": "Anon",
-        "preco": 35.00,
+        "preco": 80.00,
         "saldo_minimo": 1200.00,
         "vendido": False,
     },
     {
         "id": "card_2",
         "cc": "544169******0487|05|2029|931",
-        "categoria": "GOLD",
+        "categoria": "PLATINUM",
         "tipo": "CREDIT",
         "nome": "ALEXANDRE CARVALHO CHANAN",
         "cpf": "18319050006",
         "score_serasa": 712,
         "score_bc": 540,
         "fornecedor": "Anon",
-        "preco": 50.00,
+        "preco": 80.00,
         "saldo_minimo": 1200.00,
-        "vendido": False,
-    },
-    {
-        "id": "card_3",
-        "cc": "400217******0200|10|2027|112",
-        "categoria": "GOLD",
-        "tipo": "CREDIT",
-        "nome": "MARIA DAS DORES SILVA",
-        "cpf": "29103984922",
-        "score_serasa": 600,
-        "score_bc": 450,
-        "fornecedor": "Anon",
-        "preco": 50.00,
-        "saldo_minimo": 800.00,
         "vendido": False,
     },
 ]
@@ -317,8 +310,75 @@ def gerenciar_paginacao_botoes(lista_itens, pagina_atual, itens_por_pagina, pref
     return keyboard
 
 # ==============================================================================
-# SISTEMA DE KEYS ADMINISTRATIVO (/gerar_key e /key)
+# SISTEMA DE KEYS & GIFTS ADMINISTRATIVO
 # ==============================================================================
+
+async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS and user_id != ADMIN_ID:
+        return await update.message.reply_text("❌ Acesso negado. Apenas administradores podem criar gifts.")
+
+    texto = update.message.text.replace("/gerar_gift", "").strip()
+    
+    # Extrair valor e quantidade (suporta variações do comando)
+    val_match = re.search(r"(?:valor:\s*)?(\d+(?:[\.,]\d+)?)", texto, re.IGNORECASE)
+    qtd_match = re.search(r"(?:quantidade:\s*|qtd:\s*)(\d+)", texto, re.IGNORECASE)
+
+    if not val_match:
+        return await update.message.reply_text("⚠️ Use o formato: /gerar_gift valor: 50 quantidade: 1")
+
+    valor = float(val_match.group(1).replace(",", "."))
+    quantidade = int(qtd_match.group(1)) if qtd_match else 1
+
+    letras_num = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    codigo = "".join(random.choices(letras_num, k=7)) # Ex: P0L8340
+    
+    GIFTS_GERADOS[codigo] = {
+        "valor": valor,
+        "quantidade": quantidade,
+        "resgatados": 0
+    }
+
+    await update.message.reply_text(
+        f"✅ Gift gerado com sucesso!\n\n"
+        f"Código: <code>{codigo}</code>\n"
+        f"Valor: R$ {valor:.2f}\n"
+        f"Quantidade: {quantidade}\n\n"
+        f"Para resgatar, use:\n<code>/gift {codigo}</code>",
+        parse_mode="HTML"
+    )
+
+async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    if not context.args:
+        return await update.message.reply_text("⚠️ Envie o código do gift. Exemplo: /gift P0L8340")
+        
+    codigo = context.args[0].strip().upper()
+    
+    if codigo not in GIFTS_GERADOS:
+        return await update.message.reply_text("❌ Gift card inválido ou não encontrada.")
+        
+    gift = GIFTS_GERADOS[codigo]
+    
+    if gift["resgatados"] >= gift["quantidade"]:
+        return await update.message.reply_text("❌ Este gift card já atingiu o limite de resgates.")
+        
+    gift["resgatados"] += 1
+    valor_add = gift["valor"]
+    
+    saldo_antigo = SALDO_USUARIOS.get(user_id, 0.0)
+    SALDO_USUARIOS[user_id] = saldo_antigo + valor_add
+    novo_saldo = SALDO_USUARIOS[user_id]
+    
+    # Formatando números sem casas malucas
+    msg = (
+        f"✅ Gift card resgatado com sucesso!\n\n"
+        f"💰 Valor adicionado: R$ {valor_add:.0f}\n"
+        f"💳 Novo saldo: R$ {novo_saldo:.2f}"
+    )
+    
+    await update.message.reply_text(msg)
 
 async def comando_gerar_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -408,67 +468,7 @@ async def comando_resgatar_key(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(mensagem)
 
 # ==============================================================================
-# SISTEMA DE GIFTS (NOVA FUNCIONALIDADE)
-# ==============================================================================
-async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in ADMIN_IDS and user_id != ADMIN_ID:
-        return
-
-    texto = update.message.text.replace("/gerar_gift", "").strip()
-    val_match = re.search(r"valor:\s*(\d+(?:\.\d+)?)", texto, re.IGNORECASE)
-    qtd_match = re.search(r"quantidade:\s*(\d+)", texto, re.IGNORECASE)
-
-    if not val_match or not qtd_match:
-        await update.message.reply_text("⚠️ Use o formato: /gerar_gift valor: 50 quantidade: 1")
-        return
-
-    valor = float(val_match.group(1))
-    qtd = int(qtd_match.group(1))
-
-    # Gerador de código mesclando letras e números (ex: P0L8340)
-    codigo = f"{random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZ')}{random.randint(0,9)}{random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZ')}{random.randint(1000,9999)}"
-
-    GIFTS_GERADOS[codigo] = {"valor": valor, "qtd": qtd}
-
-    await update.message.reply_text(
-        f"✅ Gift gerado com sucesso!\n\nCódigo: <code>{codigo}</code>\nValor: R$ {valor:.2f}\nResgates possíveis: {qtd}", 
-        parse_mode="HTML"
-    )
-
-async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("⚠️ Envie o código do gift. Exemplo: /gift P0L8340")
-        return
-
-    codigo = context.args[0].strip()
-    user_id = update.effective_user.id
-
-    if codigo not in GIFTS_GERADOS:
-        await update.message.reply_text("❌ Gift inválido ou não encontrado.")
-        return
-
-    gift = GIFTS_GERADOS[codigo]
-    if gift["qtd"] <= 0:
-        await update.message.reply_text("❌ Este gift já atingiu o limite de resgates e encontra-se esgotado.")
-        return
-
-    valor_gift = gift["valor"]
-    saldo_antigo = SALDO_USUARIOS.get(user_id, 0.0)
-    novo_saldo = saldo_antigo + valor_gift
-    
-    SALDO_USUARIOS[user_id] = novo_saldo
-    gift["qtd"] -= 1
-
-    msg = (
-        f"✅ Gift card resgatado com sucesso!\n\n"
-        f"💰 Valor adicionado: R$ {valor_gift:.2f}\n"
-        f"💳 Novo saldo: R$ {novo_saldo:.2f}"
-    )
-    await update.message.reply_text(msg)
-
-# ==============================================================================
-# NOTIFICAÇÃO GLOBAL (IA)
+# NOTIFICAÇÃO GLOBAL 
 # ==============================================================================
 
 async def comando_notificar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -476,7 +476,6 @@ async def comando_notificar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in ADMIN_IDS and user_id != ADMIN_ID:
         return await update.message.reply_text("🚫 Acesso negado.")
 
-    # Verifica se é reply para salvar no cache
     if update.message.reply_to_message:
         PREVIEW_NOTIFICACAO[user_id] = {"tipo": "reply", "msg_obj": update.message.reply_to_message}
     else:
@@ -590,8 +589,8 @@ async def painel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "<code>/add_estoque_logins</code> - Add Logins\n"
         "<code>/add_estoque_ccauxiliar</code> - Add CC Auxiliar\n\n"
         "<b>Outros Comandos:</b>\n"
-        "<code>/gerar_key</code> - Gerar Key de Resgate\n"
-        "<code>/gerar_gift</code> - Gerar Gift Card de Saldo\n"
+        "<code>/gerar_key</code> - Gerar Key de CC Resgate\n"
+        "<code>/gerar_gift</code> - Gerar Gift de Saldo\n"
         "<code>/notificar</code> - Mandar mensagem geral (Com Prévia IA)\n"
         "<code>/remover_estoque</code> - Menu interativo de remoção"
     )
@@ -1058,7 +1057,6 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = query.message.chat_id
     saldo_atual = SALDO_USUARIOS.get(user_id, 0.0)
 
-    # --- CALLBACKS DA NOVA FERRAMENTA DE NOTIFICAÇÃO ---
     if data == "conf_notif":
         if user_id not in PREVIEW_NOTIFICACAO:
             return await query.message.edit_text("❌ Sessão expirada.", parse_mode="HTML")
@@ -1089,7 +1087,6 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         PREVIEW_NOTIFICACAO.pop(user_id, None)
         await query.message.edit_text("❌ Notificação cancelada. O texto e a imagem foram descartados.", parse_mode="HTML")
 
-    # --- CALLBACKS DE REMOÇÃO DE ESTOQUE ---
     elif data.startswith("rem_page_"):
         page = int(data.replace("rem_page_", ""))
         await exibir_painel_remocao(query, context, page=page)
@@ -1129,7 +1126,6 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("✅ Item removido com sucesso!", show_alert=True)
             await exibir_painel_remocao(query, context, page=0)
 
-    # --- PAGINAÇÃO DE CATÁLOGOS ---
     elif data.startswith("esim_page_"):
         page = int(data.replace("esim_page_", ""))
         itens_validos = [e for e in CATALOGO_ESIM if not e.get("vendido")]
@@ -1212,20 +1208,28 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         texto = f"🔹 <b>CASABLANCA SHOP | CC FULL DADOS</b> 🔹\n\nInformações:\n- Saldo: R$ {saldo_fmt}"
         await responder_ou_editar(query, texto, InlineKeyboardMarkup(keyboard))
 
-    # --- CORREÇÃO BUG 1 & 2: LEITURA DINÂMICA REAL DOS CARTÕES (AGRUPAMENTO MELHORADO) ---
+    # --- CORREÇÃO BUG 1: ORGANIZAÇÃO CORRETA DA CATÉGORIA ---
     elif data == "ver_unitarias":
         estoque_agrupado = {}
         for c in DADOS_CARTOES:
             if not c.get("vendido"):
+                # Agrupa apena pela categoria correta ignorando preço para não duplicar slot
                 cat = c.get("categoria_produto", "STANDARD").upper()
+                preco = c.get("preco", 80.0)
+                
                 if cat not in estoque_agrupado:
-                    estoque_agrupado[cat] = 0
-                estoque_agrupado[cat] += 1
+                    estoque_agrupado[cat] = {"qtd": 0, "preco_min": preco}
+                
+                estoque_agrupado[cat]["qtd"] += 1
+                if preco < estoque_agrupado[cat]["preco_min"]:
+                    estoque_agrupado[cat]["preco_min"] = preco
 
         keyboard = []
-        for cat, qtd in estoque_agrupado.items():
-            # Botão vai direcionar para a navegação de paginas indexada por categoria (ignora preço)
-            keyboard.append([InlineKeyboardButton(f"💳 {cat} ({qtd})", callback_data=f"nav_cat_{cat}_0")])
+        for cat, info in estoque_agrupado.items():
+            qtd = info["qtd"]
+            preco_min = info["preco_min"]
+            # Envia diretamente pro index 0 daquela categoria específica
+            keyboard.append([InlineKeyboardButton(f"R$ {preco_min:.0f} {cat} ({qtd})", callback_data=f"nav_cat_{cat}_0")])
             
         if not keyboard:
             keyboard.append([InlineKeyboardButton("❌ Sem Estoque no Momento", callback_data="voltar_cc_full")])
@@ -1233,36 +1237,28 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("🔙 Voltar", callback_data="voltar_cc_full")])
         await responder_ou_editar(query, POLITICA_REEMBOLSO, InlineKeyboardMarkup(keyboard))
 
-    # --- CORREÇÃO BUG 3: NAVEGAÇÃO ENTRE OS CARTÕES DA CATEGORIA ---
     elif data.startswith("nav_cat_"):
-        # Extrair a categoria e o index (ex: nav_cat_PLATINUM_0)
         partes = data.replace("nav_cat_", "").rsplit("_", 1)
         cat_alvo = partes[0]
         idx = int(partes[1])
 
-        # Filtrar cartoes da mesma categoria que nao estao vendidos
         cartoes_validos = [c for c in DADOS_CARTOES if not c.get("vendido") and c.get("categoria_produto", "STANDARD").upper() == cat_alvo]
 
         if not cartoes_validos:
             await query.answer("❌ Categoria sem estoque no momento!", show_alert=True)
-            # Redireciona de volta para o painel de Unitárias
             return await botao_callback(Update(update.update_id, callback_query=type('obj', (object,), {'answer': query.answer, 'data': 'ver_unitarias', 'from_user': query.from_user, 'message': query.message})()), context)
 
-        # Ajuste de borda (caso apague/compre e o index estoure)
         if idx < 0: idx = 0
         if idx >= len(cartoes_validos): idx = len(cartoes_validos) - 1
 
         card = cartoes_validos[idx]
         texto_card = montar_texto_cartao_unitario(card)
-        
-        # Inserindo o "Cartão X de Y" igual o da foto
         texto_card += f"\n\n<i>Cartão {idx + 1} de {len(cartoes_validos)}</i>"
 
         keyboard = [
             [InlineKeyboardButton("✅ Comprar", callback_data=f"buy_card_{card['id']}")]
         ]
 
-        # Botões de Anterior e Próximo (idêntico ao sistema da imagem)
         nav_buttons = []
         if idx > 0:
             nav_buttons.append(InlineKeyboardButton("⬅️ Anterior", callback_data=f"nav_cat_{cat_alvo}_{idx - 1}"))
@@ -1314,7 +1310,6 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="HTML",
                 )
 
-    # --- BOTÃO INFORMAÇÕES (PERFIL) ---
     elif data == "info":
         nome_usuario = query.from_user.first_name or "Cliente"
         saldo_fmt = f"{saldo_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -1335,7 +1330,6 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         await responder_ou_editar(query, texto_perfil, InlineKeyboardMarkup(keyboard))
 
-    # --- BOTÃO INDICAÇÕES ---
     elif data == "indicacoes":
         bot_username = (await context.bot.get_me()).username
         link_indicacao = f"https://t.me/{bot_username}?start={user_id}"
@@ -1376,7 +1370,6 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("❌ Você não possui bônus de indicação disponíveis para converter.", show_alert=True)
 
-    # --- BOTÃO FERRAMENTAS ---
     elif data == "ferramentas":
         keyboard = []
         for ferramenta in CATALOGO_FERRAMENTAS:
@@ -1446,7 +1439,6 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar ao Início", callback_data="voltar_inicio")]])
                 )
 
-    # --- CATÁLOGO DE E-SIM ---
     elif data == "esim":
         itens_validos = [e for e in CATALOGO_ESIM if not e.get("vendido")]
         keyboard = gerenciar_paginacao_botoes(itens_validos, 0, 5, "esim", "buy_esim")
@@ -1497,7 +1489,6 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar", callback_data="esim")]])
                 )
 
-    # --- CATÁLOGO DE LARAS ---
     elif data == "laras":
         itens_validos = [l for l in CATALOGO_LARAS if not l.get("vendido")]
         keyboard = gerenciar_paginacao_botoes(itens_validos, 0, 5, "laras", "buy_lara")
@@ -1546,7 +1537,6 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar", callback_data="laras")]])
                 )
 
-    # --- CATÁLOGOS CONSULTÁVEL, LOGINS E CC AUXILIAR ---
     elif data == "consultavel":
         itens_validos = [c for c in CATALOGO_CONSULTAVEL if not c.get("vendido")]
         keyboard = gerenciar_paginacao_botoes(itens_validos, 0, 5, "cons", "buy_cons")
@@ -1633,7 +1623,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await enviar_menu_principal(update, context)
 
 # ==============================================================================
-# FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM) - LOTE E DINÂMICO
+# CORREÇÃO BUG 2: FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM) - LOTE E DINÂMICO MASSIVO
 # ==============================================================================
 async def add_estoque(update, context):
     user_id = update.effective_user.id
@@ -1649,20 +1639,18 @@ async def add_estoque(update, context):
     texto_bruto = re.sub(r"^/add_estoque_ccfullldados\s*", "", texto_bruto, flags=re.IGNORECASE)
     texto_bruto = re.sub(r"^/add_estoque\s*", "", texto_bruto, flags=re.IGNORECASE)
     
-    # Suporte a múltiplos produtos divididos por "=== ESTOQUE ==="
-    blocos = [b.strip() for b in texto_bruto.split("=== ESTOQUE ===") if b.strip()]
+    # Limpando caso o usuário cole com "=== ESTOQUE ==="
+    texto_limpo = texto_bruto.replace("=== ESTOQUE ===", "")
     
-    if len(blocos) <= 1 and "Número do Cartão:" in texto_bruto:
-        # Tenta separar por "Número do Cartão:" caso o delimitador === ESTOQUE === não seja usado em blocos grandes colados juntos
-        partes = texto_bruto.split("Número do Cartão:")
-        blocos = []
-        for p in partes:
-            if p.strip():
-                # Readiciona a string de corte
-                blocos.append("Número do Cartão:" + p)
-
+    # Dividir texto massivo usando a string "Número do Cartão:"
+    chunks = re.split(r"(?i)Número do Cartão:", texto_limpo)
+    
+    blocos = []
+    for chunk in chunks[1:]:
+        blocos.append("Número do Cartão:" + chunk)
+        
     if not blocos:
-        return await update.message.reply_text("❌ Nenhum dado encontrado. Envie a ficha correta dividida por '=== ESTOQUE ===' ou apenas cole os dados diretamente.")
+        return await update.message.reply_text("❌ Nenhum dado encontrado. Certifique-se de que a ficha possua 'Número do Cartão:'.")
 
     total_recebido = len(blocos)
     adicionados = 0
@@ -1682,7 +1670,6 @@ async def add_estoque(update, context):
             preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", bloco)
             saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", bloco)
 
-            # Para capturar a categoria corretamente (evitar conflito de chaves se aparecer duas vezes)
             tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", bloco)
             categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
 
@@ -1717,7 +1704,6 @@ async def add_estoque(update, context):
             com_erro += 1
             erros_detalhes.append(f"• Estoque #{idx}: Erro interno ({str(e)})")
 
-    # Limitador de caracteres para não estourar a resposta do Telegram
     erros_str = "\n".join(erros_detalhes) if erros_detalhes else "Nenhum erro."
     if len(erros_str) > 3000: 
         erros_str = erros_str[:3000] + "\n... e mais erros omitidos."
