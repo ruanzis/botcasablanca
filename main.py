@@ -64,6 +64,13 @@ USUARIOS_REGISTRADOS = set()
 KEYS_GERADAS = {}        # {codigo: dados}
 GIFTS_GERADOS = {}       # NOVA FUNCIONALIDADE: {codigo: dados_gift}
 PREVIEW_NOTIFICACAO = {} # Variável global para a IA do notificar
+LOGS_ATIVIDADES = []     # NOVA FUNCIONALIDADE: Logs de atividades globais
+
+# Função para adicionar logs em tempo real
+def add_log(user_id, text):
+    LOGS_ATIVIDADES.insert(0, {"id": user_id, "text": text})
+    if len(LOGS_ATIVIDADES) > 50:
+        LOGS_ATIVIDADES.pop()
 
 # --- CATÁLOGOS DINÂMICOS ---
 CATALOGO_FERRAMENTAS = [
@@ -232,8 +239,8 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "bin": bin_extraida,
         "banco": banco_auto,
         "bandeira": bandeira_auto,
-        "categoria": card_raw.get("categoria", "STANDARD"),
-        "categoria_produto": card_raw.get("categoria_produto", card_raw.get("categoria", "STANDARD")).upper(),
+        "categoria": card_raw.get("categoria", card_raw.get("nivel", "STANDARD")).upper(),
+        "categoria_produto": card_raw.get("categoria_produto", card_raw.get("categoria", card_raw.get("nivel", "STANDARD"))).upper(),
         "nivel_formatado": nivel_auto,
         "tipo": card_raw.get("tipo", "CREDIT").upper(),
         "nome": card_raw.get("nome", "NÃO INFORMADO").upper(),
@@ -310,6 +317,26 @@ def gerenciar_paginacao_botoes(lista_itens, pagina_atual, itens_por_pagina, pref
     return keyboard
 
 # ==============================================================================
+# SISTEMA DE LOGS ADMINISTRATIVO (NOVA FUNCIONALIDADE)
+# ==============================================================================
+
+async def comando_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS and user_id != ADMIN_ID:
+        return await update.message.reply_text("🚫 Acesso negado.")
+
+    texto = "🛡️ <b>LOGS</b>\n\n[🔎 Pesquisar usuário]\n[🛒 Compras]\n[💳 Pagamentos]\n[👑 Administradores]\n\nÚltimas atividades:\n\n"
+    
+    if not LOGS_ATIVIDADES:
+        texto += "Nenhuma atividade recente."
+    else:
+        for log in LOGS_ATIVIDADES[:10]:
+            texto += f"👤 <code>{log['id']}</code>\n{log['text']}\n\n"
+            
+    await update.message.reply_text(texto, parse_mode="HTML")
+
+
+# ==============================================================================
 # SISTEMA DE KEYS & GIFTS ADMINISTRATIVO
 # ==============================================================================
 
@@ -338,6 +365,8 @@ async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "quantidade": quantidade,
         "resgatados": 0
     }
+
+    add_log(user_id, f"👑 Gerou Gift Card (R$ {valor:.2f})")
 
     await update.message.reply_text(
         f"✅ Gift gerado com sucesso!\n\n"
@@ -370,6 +399,8 @@ async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TY
     saldo_antigo = SALDO_USUARIOS.get(user_id, 0.0)
     SALDO_USUARIOS[user_id] = saldo_antigo + valor_add
     novo_saldo = SALDO_USUARIOS[user_id]
+    
+    add_log(user_id, f"🎁 Resgatou Gift Card\n💰 R$ {valor_add:.2f}".replace('.', ',') + "\n✅ Adicionado")
     
     # Formatando números sem casas malucas
     msg = (
@@ -416,12 +447,15 @@ async def comando_gerar_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data["resgatado"] = False
     KEYS_GERADAS[codigo] = data
 
+    add_log(user_id, "👑 Gerou Key de Resgate")
+
     await update.message.reply_text(
         f"✅ Key gerada com sucesso!\n\nCódigo de resgate: <code>{codigo}</code>\n\nPara resgatar, qualquer pessoa pode usar:\n<code>/key {codigo}</code>", 
         parse_mode="HTML"
     )
 
 async def comando_resgatar_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     if not context.args:
         await update.message.reply_text("⚠️ Envie o código da key. Exemplo: /key KEY-123456")
         return
@@ -439,6 +473,8 @@ async def comando_resgatar_key(update: Update, context: ContextTypes.DEFAULT_TYP
     KEYS_GERADAS[codigo]["resgatado"] = True
     d = KEYS_GERADAS[codigo]
     
+    add_log(user_id, "🔑 Resgatou Key CC Full")
+
     mensagem = (
         "✅ Cartão comprado com Sucesso!\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
@@ -476,6 +512,8 @@ async def comando_notificar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in ADMIN_IDS and user_id != ADMIN_ID:
         return await update.message.reply_text("🚫 Acesso negado.")
 
+    add_log(user_id, "👑 Preparou uma notificação global")
+
     if update.message.reply_to_message:
         PREVIEW_NOTIFICACAO[user_id] = {"tipo": "reply", "msg_obj": update.message.reply_to_message}
     else:
@@ -509,6 +547,7 @@ async def comando_remover_estoque(update: Update, context: ContextTypes.DEFAULT_
     if user_id not in ADMIN_IDS and user_id != ADMIN_ID:
         return await update.message.reply_text("🚫 Acesso negado.")
 
+    add_log(user_id, "👑 Acessou painel de remoção de estoque")
     await exibir_painel_remocao(update, context, page=0)
 
 async def exibir_painel_remocao(update_or_query, context, page=0, itens_por_pagina=5):
@@ -591,6 +630,7 @@ async def painel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "<b>Outros Comandos:</b>\n"
         "<code>/gerar_key</code> - Gerar Key de CC Resgate\n"
         "<code>/gerar_gift</code> - Gerar Gift de Saldo\n"
+        "<code>/logs</code> - Ver registros de atividades recentes\n"
         "<code>/notificar</code> - Mandar mensagem geral (Com Prévia IA)\n"
         "<code>/remover_estoque</code> - Menu interativo de remoção"
     )
@@ -618,6 +658,7 @@ async def add_estoque_esim(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "qtd": 1,
         "vendido": False
     })
+    add_log(user_id, f"👑 Adicionou item E-SIM ao estoque")
     await update.message.reply_text(f"✅ <b>E-SIM adicionado com sucesso ao catálogo!</b>\n\n📱 {nome} - R$ {preco:.2f}", parse_mode="HTML")
 
 async def add_estoque_laras(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -650,6 +691,7 @@ async def add_estoque_laras(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "preco": preco,
         "vendido": False
     })
+    add_log(user_id, f"👑 Adicionou item LARA ao estoque")
     await update.message.reply_text(f"✅ <b>Lara adicionada com sucesso ao catálogo!</b>\n\n🛡️ {nome} - R$ {preco:.2f}", parse_mode="HTML")
 
 async def add_estoque_ccfullldados(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -676,6 +718,7 @@ async def add_estoque_consultavel(update: Update, context: ContextTypes.DEFAULT_
         "preco": preco,
         "vendido": False
     })
+    add_log(user_id, f"👑 Adicionou item CONSULTÁVEL ao estoque")
     await update.message.reply_text(f"✅ <b>Consultável adicionado com sucesso ao catálogo!</b>\n\n📁 {nome} - R$ {preco:.2f}", parse_mode="HTML")
 
 async def add_estoque_logins(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -699,6 +742,7 @@ async def add_estoque_logins(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "preco": preco,
         "vendido": False
     })
+    add_log(user_id, f"👑 Adicionou item LOGIN ao estoque")
     await update.message.reply_text(f"✅ <b>Login adicionado com sucesso ao catálogo!</b>\n\n🗽 {nome} - R$ {preco:.2f}", parse_mode="HTML")
 
 async def add_estoque_ccauxiliar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -722,6 +766,7 @@ async def add_estoque_ccauxiliar(update: Update, context: ContextTypes.DEFAULT_T
         "preco": preco,
         "vendido": False
     })
+    add_log(user_id, f"👑 Adicionou item CC AUXILIAR ao estoque")
     await update.message.reply_text(f"✅ <b>CC Auxiliar adicionado com sucesso ao catálogo!</b>\n\n💳 {nome} - R$ {preco:.2f}", parse_mode="HTML")
 
 telegram_app = Application.builder().token(TOKEN).build()
@@ -880,6 +925,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    add_log(user_id, "👁 Iniciou o bot")
+
     if context.args:
         try:
             referrer_id = int(context.args[0])
@@ -926,6 +973,7 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    add_log(user_id, f"💳 Gerou QR Code Pix (R$ {valor:.2f})".replace('.', ','))
     dados_pix = await gerar_pix_misticpay(valor, user_id, user.first_name)
     
     if dados_pix and "pix_code" in dados_pix:
@@ -1248,6 +1296,8 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("❌ Categoria sem estoque no momento!", show_alert=True)
             return await botao_callback(Update(update.update_id, callback_query=type('obj', (object,), {'answer': query.answer, 'data': 'ver_unitarias', 'from_user': query.from_user, 'message': query.message})()), context)
 
+        add_log(user_id, f"👁 Visualizou Produto {cat_alvo}")
+
         if idx < 0: idx = 0
         if idx >= len(cartoes_validos): idx = len(cartoes_validos) - 1
 
@@ -1295,6 +1345,9 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 SALDO_USUARIOS[user_id] -= card["preco"]
                 card["vendido"] = True
+                
+                add_log(user_id, f"🛒 Comprou Produto CC FULL {card['categoria']}\n💰 R$ {card['preco']:.2f}".replace('.', ',') + "\n✅ Pago")
+
                 novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -1425,6 +1478,9 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 SALDO_USUARIOS[user_id] -= ferramenta["preco"]
+                
+                add_log(user_id, f"🛒 Comprou Produto FERRAMENTA {ferramenta['nome']}\n💰 R$ {ferramenta['preco']:.2f}".replace('.', ',') + "\n✅ Pago")
+
                 novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -1475,6 +1531,8 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     item["vendido"] = True
 
+                add_log(user_id, f"🛒 Comprou Produto E-SIM {item['nome']}\n💰 R$ {item['preco']:.2f}".replace('.', ',') + "\n✅ Pago")
+
                 novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -1520,6 +1578,9 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 SALDO_USUARIOS[user_id] -= item["preco"]
                 item["vendido"] = True
+                
+                add_log(user_id, f"🛒 Comprou Produto LARA {item['nome']}\n💰 R$ {item['preco']:.2f}".replace('.', ',') + "\n✅ Pago")
+
                 novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -1555,6 +1616,9 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 SALDO_USUARIOS[user_id] -= item["preco"]
                 item["vendido"] = True
+                
+                add_log(user_id, f"🛒 Comprou Produto CONSULTÁVEL {item['nome']}\n💰 R$ {item['preco']:.2f}".replace('.', ',') + "\n✅ Pago")
+
                 novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -1580,6 +1644,9 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 SALDO_USUARIOS[user_id] -= item["preco"]
                 item["vendido"] = True
+                
+                add_log(user_id, f"🛒 Comprou Produto LOGIN {item['nome']}\n💰 R$ {item['preco']:.2f}".replace('.', ',') + "\n✅ Pago")
+
                 novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -1605,6 +1672,9 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 SALDO_USUARIOS[user_id] -= item["preco"]
                 item["vendido"] = True
+                
+                add_log(user_id, f"🛒 Comprou Produto CC AUXILIAR {item['nome']}\n💰 R$ {item['preco']:.2f}".replace('.', ',') + "\n✅ Pago")
+
                 novo_saldo_fmt = f"{SALDO_USUARIOS[user_id]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -1686,7 +1756,8 @@ async def add_estoque(update, context):
                 "cc": cartao_match.group(1).strip(),
                 "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
                 "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
-                "categoria_produto": categoria_final,
+                "categoria": categoria_final,  # <--- CORREÇÃO DEFINITIVA BUG 1 e 2
+                "categoria_produto": categoria_final, # <--- CORREÇÃO DEFINITIVA BUG 1 e 2
                 "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
                 "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
                 "cpf": cpf_match.group(1).strip() if cpf_match else "",
@@ -1716,6 +1787,7 @@ async def add_estoque(update, context):
         f"<b>Erros Detalhados:</b>\n{erros_str}"
     )
     
+    add_log(user_id, f"👑 Adicionou {adicionados} itens ao estoque (CC FULL)")
     await update.message.reply_text(resumo, parse_mode="HTML")
 
 # --- REGISTRO DE HANDLERS ---
@@ -1726,6 +1798,7 @@ telegram_app.add_handler(CommandHandler("gerar_key", comando_gerar_key))
 telegram_app.add_handler(CommandHandler("key", comando_resgatar_key))
 telegram_app.add_handler(CommandHandler("gerar_gift", comando_gerar_gift))
 telegram_app.add_handler(CommandHandler("gift", comando_resgatar_gift))
+telegram_app.add_handler(CommandHandler("logs", comando_logs))
 telegram_app.add_handler(CommandHandler("notificar", comando_notificar))
 telegram_app.add_handler(CommandHandler("remover_estoque", comando_remover_estoque))
 telegram_app.add_handler(InlineQueryHandler(inline_search))
@@ -1770,6 +1843,8 @@ async def misticpay_webhook(request: Request):
         if status == "COMPLETO" and "User " in description:
             user_id = int(description.split("User ")[1])
             SALDO_USUARIOS[user_id] = SALDO_USUARIOS.get(user_id, 0.0) + value
+
+            add_log(user_id, f"💰 Recebeu Depósito Pix\n💰 R$ {value:.2f}".replace('.', ',') + "\n✅ Pago")
 
             referrer_id = INDICACOES_USUARIOS.get(user_id)
             if referrer_id:
