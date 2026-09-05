@@ -42,7 +42,7 @@ CAPA_PATH = "capa.jpg"
 
 THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
-# Credenciais VexaPay (Atualizadas)
+# Novas Configurações da VexaPay
 VEXAPAY_CLIENT_ID = os.getenv("VEXAPAY_CLIENT_ID", "vxp_957ce1bc70f5b34785933ea1")
 VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_84c0a764791906cb78399aad4e7d7590262b7493ea07a793")
 VEXAPAY_WEBHOOK_SECRET = os.getenv("VEXAPAY_WEBHOOK_SECRET", "vwh_4535956030642e92d2bfae361946d62857f38c06b174286f")
@@ -206,33 +206,12 @@ def identificar_banco_por_bin(bin_code: str) -> str:
     else:
         return "BANCO DESCONHECIDO"
 
-def identificar_nivel(categoria_raw: str) -> str:
-    cat = str(categoria_raw).upper().strip()
-    if "BLACK" in cat:
-        return "BLACK"
-    elif "INFINITE" in cat:
-        return "INFINITE"
-    elif "PLATINUM" in cat:
-        return "PLATINUM"
-    elif "GOLD" in cat or "OURO" in cat:
-        return "GOLD"
-    elif "STANDARD" in cat:
-        return "STANDARD"
-    elif "CLASSIC" in cat:
-        return "CLASSIC"
-    elif "BUSINESS" in cat:
-        return "BUSINESS"
-    elif "ELO" in cat:
-        return "ELO"
-    else:
-        return cat if cat else "STANDARD"
-
 def edificar_item_estoque(card_raw: dict) -> dict:
     cc_bruto = card_raw.get("cc", "")
     bin_extraida = identificar_bin(cc_bruto)
     banco_auto = card_raw.get("banco", identificar_banco_por_bin(bin_extraida))
     bandeira_auto = card_raw.get("bandeira", identificar_bandeira(bin_extraida))
-    nivel_auto = identificar_nivel(card_raw.get("categoria", ""))
+    categoria_exata = card_raw.get("categoria", "STANDARD").upper()
 
     return {
         "id": card_raw.get("id"),
@@ -241,9 +220,9 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "bin": bin_extraida,
         "banco": banco_auto,
         "bandeira": bandeira_auto,
-        "categoria": card_raw.get("categoria", card_raw.get("nivel", "STANDARD")).upper(),
-        "categoria_produto": card_raw.get("categoria_produto", card_raw.get("categoria", card_raw.get("nivel", "STANDARD"))).upper(),
-        "nivel_formatado": nivel_auto,
+        "categoria": categoria_exata,
+        "categoria_produto": categoria_exata,
+        "nivel_formatado": categoria_exata,
         "tipo": card_raw.get("tipo", "CREDIT").upper(),
         "nome": card_raw.get("nome", "NÃO INFORMADO").upper(),
         "cpf": re.sub(r"\D", "", str(card_raw.get("cpf", ""))),
@@ -355,7 +334,7 @@ async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TY
     codigo = context.args[0].strip().upper()
     
     if codigo not in GIFTS_GERADOS:
-        return await update.message.reply_text("❌ Gift card inválido ou não encontrada.")
+        return await update.message.reply_text("❌ Gift card inválido ou não encontrado.")
         
     gift = GIFTS_GERADOS[codigo]
     
@@ -963,6 +942,7 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     add_log(user_id, f"💳 Gerou QR Code Pix (R$ {valor:.2f})".replace('.', ','))
     
+    # Integração com a nova Gateway VexaPay
     dados_pix = await gerar_pix_vexapay(valor, user_id, user.first_name)
     
     if dados_pix and "pix_code" in dados_pix:
@@ -1679,7 +1659,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await enviar_menu_principal(update, context)
 
 # ==============================================================================
-# FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM) - LOTE E DINÂMICO MASSIVO[cite: 7]
+# FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM) - LOTE E DINÂMICO MASSIVO
 # ==============================================================================
 async def add_estoque(update, context):
     user_id = update.effective_user.id
@@ -1773,7 +1753,7 @@ async def add_estoque(update, context):
     add_log(user_id, f"👑 Adicionou {adicionados} itens ao estoque (CC FULL)")
     await update.message.reply_text(resumo, parse_mode="HTML")
 
-# --- REGISTRO DE HANDLERS ---[cite: 7]
+# --- REGISTRO DE HANDLERS ---
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
@@ -1799,7 +1779,7 @@ telegram_app.add_handler(CommandHandler("add_estoque_ccauxiliar", add_estoque_cc
 async def lifespan(app: FastAPI):
     await telegram_app.initialize()
     await telegram_app.start()
-    webhook_url = f"{WEBHOOK_BASE_URL.rstrip('/')}/webhook/vexapay"
+    webhook_url = f"{WEBHOOK_BASE_URL.rstrip('/')}/telegram-webhook"
     await telegram_app.bot.set_webhook(url=webhook_url)
     asyncio.create_task(anti_sleep_ping())
     yield
@@ -1820,12 +1800,10 @@ async def vexapay_webhook(request: Request):
     try:
         payload = await request.json()
         
-        # Adaptação para suportar os padrões de retorno da VexaPay
         status = payload.get("status", "").upper()
         value = float(payload.get("value", payload.get("amount", 0)))
         description = payload.get("description", payload.get("external_id", payload.get("transactionId", "")))
 
-        # Status de sucesso genéricos para gateways
         if status in ["COMPLETO", "PAID", "APPROVED", "CONFIRMED", "SUCESSO", "SUCCESS"] and ("User " in description or "tx_" in description):
             user_id = None
             if "User " in description:
