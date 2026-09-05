@@ -27,11 +27,11 @@ from telegram.ext import (
     filters,
 )
 
-# Configuração de Logs[cite: 7]
+# Configuração de Logs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configurações de Ambiente[cite: 7]
+# Configurações de Ambiente
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
 ID_CANAL = os.getenv("ID_CANAL", "@oficialharidade")
 
@@ -42,7 +42,7 @@ CAPA_PATH = "capa.jpg"
 
 THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
-# Credenciais VexaPay[cite: 7]
+# Credenciais VexaPay (Atualizadas)
 VEXAPAY_CLIENT_ID = os.getenv("VEXAPAY_CLIENT_ID", "vxp_957ce1bc70f5b34785933ea1")
 VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_84c0a764791906cb78399aad4e7d7590262b7493ea07a793")
 VEXAPAY_WEBHOOK_SECRET = os.getenv("VEXAPAY_WEBHOOK_SECRET", "vwh_4535956030642e92d2bfae361946d62857f38c06b174286f")
@@ -60,20 +60,21 @@ POLITICA_REEMBOLSO = (
 
 SALDO_USUARIOS = {}
 CACHE_CANAL = {}
-INDICACOES_USUARIOS = {} # {user_id: referrer_id}[cite: 7]
-TOTAL_INDICADOS = {}     # {user_id: count}[cite: 7]
+INDICACOES_USUARIOS = {} # {user_id: referrer_id}
+TOTAL_INDICADOS = {}     # {user_id: count}
 USUARIOS_REGISTRADOS = set()
-KEYS_GERADAS = {}        # {codigo: dados}[cite: 7]
-GIFTS_GERADOS = {}       # {codigo: dados_gift}[cite: 7]
-PREVIEW_NOTIFICACAO = {} # Variável global para a IA do notificar[cite: 7]
-LOGS_ATIVIDADES = []     # Logs de atividades globais[cite: 7]
+KEYS_GERADAS = {}        # {codigo: dados}
+GIFTS_GERADOS = {}       # NOVA FUNCIONALIDADE: {codigo: dados_gift}
+PREVIEW_NOTIFICACAO = {} # Variável global para a IA do notificar
+LOGS_ATIVIDADES = []     # Logs de atividades globais
 
+# Função para adicionar logs em tempo real
 def add_log(user_id, text):
     LOGS_ATIVIDADES.insert(0, {"id": user_id, "text": text})
     if len(LOGS_ATIVIDADES) > 50:
         LOGS_ATIVIDADES.pop()
 
-# --- CATÁLOGOS DINÂMICOS ---[cite: 7]
+# --- CATÁLOGOS DINÂMICOS ---
 CATALOGO_FERRAMENTAS = [
     {
         "id": "tool_kl_mob",
@@ -157,7 +158,7 @@ CATALOGO_CONSULTAVEL = []
 CATALOGO_LOGINS = []
 CATALOGO_CCAUXILIAR = []
 
-# --- MOTOR DE AUTOMAÇÃO E EDIFICAÇÃO DE ESTOQUE ---[cite: 7]
+# --- MOTOR DE AUTOMAÇÃO E EDIFICAÇÃO DE ESTOQUE ---
 
 def identificar_bin(cc_number: str) -> str:
     apenas_numeros = re.sub(r"\D", "", str(cc_number))
@@ -205,12 +206,33 @@ def identificar_banco_por_bin(bin_code: str) -> str:
     else:
         return "BANCO DESCONHECIDO"
 
+def identificar_nivel(categoria_raw: str) -> str:
+    cat = str(categoria_raw).upper().strip()
+    if "BLACK" in cat:
+        return "BLACK"
+    elif "INFINITE" in cat:
+        return "INFINITE"
+    elif "PLATINUM" in cat:
+        return "PLATINUM"
+    elif "GOLD" in cat or "OURO" in cat:
+        return "GOLD"
+    elif "STANDARD" in cat:
+        return "STANDARD"
+    elif "CLASSIC" in cat:
+        return "CLASSIC"
+    elif "BUSINESS" in cat:
+        return "BUSINESS"
+    elif "ELO" in cat:
+        return "ELO"
+    else:
+        return cat if cat else "STANDARD"
+
 def edificar_item_estoque(card_raw: dict) -> dict:
     cc_bruto = card_raw.get("cc", "")
     bin_extraida = identificar_bin(cc_bruto)
     banco_auto = card_raw.get("banco", identificar_banco_por_bin(bin_extraida))
     bandeira_auto = card_raw.get("bandeira", identificar_bandeira(bin_extraida))
-    categoria_exata = card_raw.get("categoria", "STANDARD").upper()
+    nivel_auto = identificar_nivel(card_raw.get("categoria", ""))
 
     return {
         "id": card_raw.get("id"),
@@ -219,9 +241,9 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "bin": bin_extraida,
         "banco": banco_auto,
         "bandeira": bandeira_auto,
-        "categoria": categoria_exata,
-        "categoria_produto": categoria_exata,
-        "nivel_formatado": categoria_exata,
+        "categoria": card_raw.get("categoria", card_raw.get("nivel", "STANDARD")).upper(),
+        "categoria_produto": card_raw.get("categoria_produto", card_raw.get("categoria", card_raw.get("nivel", "STANDARD"))).upper(),
+        "nivel_formatado": nivel_auto,
         "tipo": card_raw.get("tipo", "CREDIT").upper(),
         "nome": card_raw.get("nome", "NÃO INFORMADO").upper(),
         "cpf": re.sub(r"\D", "", str(card_raw.get("cpf", ""))),
@@ -238,7 +260,7 @@ DADOS_CARTOES = [edificar_item_estoque(item) for item in ESTOQUE_BRUTO]
 CATALOGO_UNITARIAS = []
 
 # ==============================================================================
-# FUNÇÕES DE NAVEGAÇÃO E PAGINAÇÃO[cite: 7]
+# FUNÇÕES DE NAVEGAÇÃO E PAGINAÇÃO
 # ==============================================================================
 
 def gerenciar_paginacao_botoes(lista_itens, pagina_atual, itens_por_pagina, prefixo_nav, callback_compra):
@@ -266,7 +288,7 @@ def gerenciar_paginacao_botoes(lista_itens, pagina_atual, itens_por_pagina, pref
     return keyboard
 
 # ==============================================================================
-# SISTEMA DE LOGS ADMINISTRATIVO[cite: 7]
+# SISTEMA DE LOGS ADMINISTRATIVO
 # ==============================================================================
 
 async def comando_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -285,7 +307,7 @@ async def comando_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(texto, parse_mode="HTML")
 
 # ==============================================================================
-# SISTEMA DE KEYS & GIFTS ADMINISTRATIVO[cite: 7]
+# SISTEMA DE KEYS & GIFTS ADMINISTRATIVO
 # ==============================================================================
 
 async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -305,7 +327,7 @@ async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE)
     quantidade = int(qtd_match.group(1)) if qtd_match else 1
 
     letras_num = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    codigo = "".join(random.choices(letras_num, k=7))
+    codigo = "".join(random.choices(letras_num, k=7)) # Ex: P0L8340
     
     GIFTS_GERADOS[codigo] = {
         "valor": valor,
@@ -333,7 +355,7 @@ async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TY
     codigo = context.args[0].strip().upper()
     
     if codigo not in GIFTS_GERADOS:
-        return await update.message.reply_text("❌ Gift card inválido ou não encontrado.")
+        return await update.message.reply_text("❌ Gift card inválido ou não encontrada.")
         
     gift = GIFTS_GERADOS[codigo]
     
@@ -450,7 +472,7 @@ async def comando_resgatar_key(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(mensagem)
 
 # ==============================================================================
-# NOTIFICAÇÃO GLOBAL[cite: 7]
+# NOTIFICAÇÃO GLOBAL 
 # ==============================================================================
 
 async def comando_notificar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -557,7 +579,7 @@ async def exibir_painel_remocao(update_or_query, context, page=0, itens_por_pagi
         await update_or_query.edit_message_text(texto, reply_markup=reply_markup, parse_mode="HTML")
 
 # ==============================================================================
-# INSERÇÃO DINÂMICA DE ESTOQUE POR COMANDOS ADMINISTRATIVOS[cite: 7]
+# INSERÇÃO DINÂMICA DE ESTOQUE POR COMANDOS ADMINISTRATIVOS
 # ==============================================================================
 
 async def painel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -747,7 +769,7 @@ async def anti_sleep_ping():
                 pass
 
 # ==============================================================================
-# NOVA INTEGRAÇÃO VEXAPAY (Chamada Direta e Robusta)[cite: 7]
+# NOVA INTEGRAÇÃO VEXAPAY (Chamada Direta e Robusta)
 # ==============================================================================
 async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
     url = "https://vexapay.site/api/v1/charges"
@@ -812,7 +834,7 @@ async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     except Exception:
         return False
 
-# --- FUNÇÃO AUXILIAR SEGURA PARA ATUALIZAR TELA ---[cite: 7]
+# --- FUNÇÃO AUXILIAR SEGURA PARA ATUALIZAR TELA ---
 async def responder_ou_editar(query, texto, reply_markup, parse_mode="HTML"):
     try:
         if query.message.photo:
@@ -1716,6 +1738,7 @@ async def add_estoque(update, context):
                 "id": f"card_{len(DADOS_CARTOES) + 1}_{random.randint(1000,9999)}",
                 "cc": cartao_match.group(1).strip(),
                 "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
+                "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
                 "categoria": categoria_final,
                 "categoria_produto": categoria_final,
                 "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
@@ -1797,10 +1820,12 @@ async def vexapay_webhook(request: Request):
     try:
         payload = await request.json()
         
+        # Adaptação para suportar os padrões de retorno da VexaPay
         status = payload.get("status", "").upper()
         value = float(payload.get("value", payload.get("amount", 0)))
         description = payload.get("description", payload.get("external_id", payload.get("transactionId", "")))
 
+        # Status de sucesso genéricos para gateways
         if status in ["COMPLETO", "PAID", "APPROVED", "CONFIRMED", "SUCESSO", "SUCCESS"] and ("User " in description or "tx_" in description):
             user_id = None
             if "User " in description:
