@@ -44,7 +44,7 @@ THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
 # Novas Configurações da VexaPay
 VEXAPAY_CLIENT_ID = os.getenv("VEXAPAY_CLIENT_ID", "vxp_957ce1bc70f5b34785933ea1")
-VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_84c0a764791906cb78399aad4e7d7590262b7493ea07a793")
+VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_81be074cdddd50badb77e7623f3f328e6eea7cc17a0c5be6")
 VEXAPAY_WEBHOOK_SECRET = os.getenv("VEXAPAY_WEBHOOK_SECRET", "vwh_4535956030642e92d2bfae361946d62857f38c06b174286f")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
