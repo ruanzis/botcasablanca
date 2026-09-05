@@ -42,7 +42,7 @@ CAPA_PATH = "capa.jpg"
 
 THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
-# Novas Configurações da VexaPay
+# Credenciais VexaPay[cite: 7]
 VEXAPAY_CLIENT_ID = os.getenv("VEXAPAY_CLIENT_ID", "vxp_957ce1bc70f5b34785933ea1")
 VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_84c0a764791906cb78399aad4e7d7590262b7493ea07a793")
 VEXAPAY_WEBHOOK_SECRET = os.getenv("VEXAPAY_WEBHOOK_SECRET", "vwh_4535956030642e92d2bfae361946d62857f38c06b174286f")
@@ -64,11 +64,10 @@ INDICACOES_USUARIOS = {} # {user_id: referrer_id}[cite: 7]
 TOTAL_INDICADOS = {}     # {user_id: count}[cite: 7]
 USUARIOS_REGISTRADOS = set()
 KEYS_GERADAS = {}        # {codigo: dados}[cite: 7]
-GIFTS_GERADOS = {}       # NOVA FUNCIONALIDADE: {codigo: dados_gift}[cite: 7]
+GIFTS_GERADOS = {}       # {codigo: dados_gift}[cite: 7]
 PREVIEW_NOTIFICACAO = {} # Variável global para a IA do notificar[cite: 7]
-LOGS_ATIVIDADES = []     # NOVA FUNCIONALIDADE: Logs de atividades globais[cite: 7]
+LOGS_ATIVIDADES = []     # Logs de atividades globais[cite: 7]
 
-# Função para adicionar logs em tempo real[cite: 7]
 def add_log(user_id, text):
     LOGS_ATIVIDADES.insert(0, {"id": user_id, "text": text})
     if len(LOGS_ATIVIDADES) > 50:
@@ -206,33 +205,12 @@ def identificar_banco_por_bin(bin_code: str) -> str:
     else:
         return "BANCO DESCONHECIDO"
 
-def identificar_nivel(categoria_raw: str) -> str:
-    cat = str(categoria_raw).upper().strip()
-    if "BLACK" in cat:
-        return "BLACK"
-    elif "INFINITE" in cat:
-        return "INFINITE"
-    elif "PLATINUM" in cat:
-        return "PLATINUM"
-    elif "GOLD" in cat or "OURO" in cat:
-        return "GOLD"
-    elif "STANDARD" in cat:
-        return "STANDARD"
-    elif "CLASSIC" in cat:
-        return "CLASSIC"
-    elif "BUSINESS" in cat:
-        return "BUSINESS"
-    elif "ELO" in cat:
-        return "ELO"
-    else:
-        return cat if cat else "STANDARD"
-
 def edificar_item_estoque(card_raw: dict) -> dict:
     cc_bruto = card_raw.get("cc", "")
     bin_extraida = identificar_bin(cc_bruto)
     banco_auto = card_raw.get("banco", identificar_banco_por_bin(bin_extraida))
     bandeira_auto = card_raw.get("bandeira", identificar_bandeira(bin_extraida))
-    nivel_auto = identificar_nivel(card_raw.get("categoria", ""))
+    categoria_exata = card_raw.get("categoria", "STANDARD").upper()
 
     return {
         "id": card_raw.get("id"),
@@ -241,9 +219,9 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "bin": bin_extraida,
         "banco": banco_auto,
         "bandeira": bandeira_auto,
-        "categoria": card_raw.get("categoria", card_raw.get("nivel", "STANDARD")).upper(),
-        "categoria_produto": card_raw.get("categoria_produto", card_raw.get("categoria", card_raw.get("nivel", "STANDARD"))).upper(),
-        "nivel_formatado": nivel_auto,
+        "categoria": categoria_exata,
+        "categoria_produto": categoria_exata,
+        "nivel_formatado": categoria_exata,
         "tipo": card_raw.get("tipo", "CREDIT").upper(),
         "nome": card_raw.get("nome", "NÃO INFORMADO").upper(),
         "cpf": re.sub(r"\D", "", str(card_raw.get("cpf", ""))),
@@ -327,7 +305,7 @@ async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE)
     quantidade = int(qtd_match.group(1)) if qtd_match else 1
 
     letras_num = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    codigo = "".join(random.choices(letras_num, k=7)) # Ex: P0L8340
+    codigo = "".join(random.choices(letras_num, k=7))
     
     GIFTS_GERADOS[codigo] = {
         "valor": valor,
@@ -355,7 +333,7 @@ async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TY
     codigo = context.args[0].strip().upper()
     
     if codigo not in GIFTS_GERADOS:
-        return await update.message.reply_text("❌ Gift card inválido ou não encontrada.")
+        return await update.message.reply_text("❌ Gift card inválido ou não encontrado.")
         
     gift = GIFTS_GERADOS[codigo]
     
@@ -769,7 +747,7 @@ async def anti_sleep_ping():
                 pass
 
 # ==============================================================================
-# NOVA INTEGRAÇÃO VEXAPAY (Substituindo MisticPay)
+# NOVA INTEGRAÇÃO VEXAPAY (Chamada Direta e Robusta)[cite: 7]
 # ==============================================================================
 async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
     url = "https://vexapay.site/api/v1/charges"
@@ -777,6 +755,7 @@ async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
         "Authorization": f"Bearer {VEXAPAY_CLIENT_SECRET.strip()}",
         "X-Client-Id": VEXAPAY_CLIENT_ID.strip(),
         "Content-Type": "application/json",
+        "Accept": "application/json",
     }
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
@@ -792,13 +771,30 @@ async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload, headers=headers, timeout=10.0)
+            response = await client.post(url, json=payload, headers=headers, timeout=15.0)
             if response.status_code in [200, 201]:
                 res = response.json()
                 data_obj = res.get("data", res)
-                pix_code = data_obj.get("copyPaste") or data_obj.get("qrcodeUrl") or data_obj.get("qrCodeBase64") or data_obj.get("payload") or data_obj.get("pixCopiaECola")
+                
+                # Varrer todos os possíveis campos de código Pix
+                pix_code = (
+                    data_obj.get("copyPaste") 
+                    or data_obj.get("pix_code")
+                    or data_obj.get("pixCopiaECola") 
+                    or data_obj.get("payload") 
+                    or data_obj.get("qrcode") 
+                    or data_obj.get("qrCodeBase64") 
+                    or data_obj.get("qrcodeUrl")
+                )
+                
+                # Se vier dentro de sub-objeto point_of_interaction
+                if not pix_code and isinstance(data_obj.get("point_of_interaction"), dict):
+                    poi = data_obj["point_of_interaction"].get("transaction_data", {})
+                    pix_code = poi.get("qr_code") or poi.get("qr_code_base64")
+
                 if pix_code:
                     return {"pix_code": pix_code}
+            
             return {"erro": f"Status {response.status_code}: {response.text}"}
     except Exception as e:
         return {"erro": f"Falha de conexão: {str(e)}"}
@@ -884,7 +880,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     USUARIOS_REGISTRADOS.add(user_id)
     msg_id = update.message.message_id
     
-    # Verificação de grupo/canal
     if update.effective_chat.type in ['group', 'supergroup', 'channel']:
         me = await context.bot.get_me()
         keyboard = [[InlineKeyboardButton("💬 Conversar no Privado", url=f"https://t.me/{me.username}?start=true")]]
@@ -946,7 +941,6 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     add_log(user_id, f"💳 Gerou QR Code Pix (R$ {valor:.2f})".replace('.', ','))
     
-    # Integração com a nova Gateway VexaPay
     dados_pix = await gerar_pix_vexapay(valor, user_id, user.first_name)
     
     if dados_pix and "pix_code" in dados_pix:
@@ -1675,14 +1669,11 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
-    # Remover o comando da string
     texto_bruto = re.sub(r"^/add_estoque_ccfullldados\s*", "", texto_bruto, flags=re.IGNORECASE)
     texto_bruto = re.sub(r"^/add_estoque\s*", "", texto_bruto, flags=re.IGNORECASE)
     
-    # Limpando caso o usuário cole com "=== ESTOQUE ==="
     texto_limpo = texto_bruto.replace("=== ESTOQUE ===", "")
     
-    # Dividir texto massivo usando a string "Número do Cartão:"
     chunks = re.split(r"(?i)Número do Cartão:", texto_limpo)
     
     blocos = []
@@ -1704,7 +1695,6 @@ async def add_estoque(update, context):
             cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", bloco, re.IGNORECASE)
             banco_match = re.search(r"Banco:\s*([^\n]+)", bloco, re.IGNORECASE)
             
-            # ATENÇÃO - GARANTIA DA EXTRAÇÃO EXATA DA CATEGORIA:
             categoria_match = re.search(r"Categoria:\s*([^\n]+)", bloco, re.IGNORECASE)
             categoria_final = categoria_match.group(1).strip().upper() if categoria_match else "STANDARD"
 
@@ -1726,7 +1716,6 @@ async def add_estoque(update, context):
                 "id": f"card_{len(DADOS_CARTOES) + 1}_{random.randint(1000,9999)}",
                 "cc": cartao_match.group(1).strip(),
                 "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
-                "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
                 "categoria": categoria_final,
                 "categoria_produto": categoria_final,
                 "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
@@ -1761,7 +1750,7 @@ async def add_estoque(update, context):
     add_log(user_id, f"👑 Adicionou {adicionados} itens ao estoque (CC FULL)")
     await update.message.reply_text(resumo, parse_mode="HTML")
 
-# --- REGISTRO DE HANDLERS ---
+# --- REGISTRO DE HANDLERS ---[cite: 7]
 telegram_app.add_handler(CommandHandler("add_estoque", add_estoque))
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("pix", comando_pix))
@@ -1787,7 +1776,7 @@ telegram_app.add_handler(CommandHandler("add_estoque_ccauxiliar", add_estoque_cc
 async def lifespan(app: FastAPI):
     await telegram_app.initialize()
     await telegram_app.start()
-    webhook_url = f"{WEBHOOK_BASE_URL.rstrip('/')}/telegram-webhook"
+    webhook_url = f"{WEBHOOK_BASE_URL.rstrip('/')}/webhook/vexapay"
     await telegram_app.bot.set_webhook(url=webhook_url)
     asyncio.create_task(anti_sleep_ping())
     yield
@@ -1808,12 +1797,10 @@ async def vexapay_webhook(request: Request):
     try:
         payload = await request.json()
         
-        # Adaptação para suportar os padrões de retorno da VexaPay
         status = payload.get("status", "").upper()
         value = float(payload.get("value", payload.get("amount", 0)))
         description = payload.get("description", payload.get("external_id", payload.get("transactionId", "")))
 
-        # Status de sucesso genéricos para gateways
         if status in ["COMPLETO", "PAID", "APPROVED", "CONFIRMED", "SUCESSO", "SUCCESS"] and ("User " in description or "tx_" in description):
             user_id = None
             if "User " in description:
