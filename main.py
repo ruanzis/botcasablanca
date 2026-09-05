@@ -27,11 +27,11 @@ from telegram.ext import (
     filters,
 )
 
-# Configuração de Logs[cite: 7]
+# Configuração de Logs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configurações de Ambiente[cite: 7]
+# Configurações de Ambiente
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
 ID_CANAL = os.getenv("ID_CANAL", "@oficialharidade")
 
@@ -42,10 +42,8 @@ CAPA_PATH = "capa.jpg"
 
 THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
-# Novas Configurações da VexaPay
-VEXAPAY_CLIENT_ID = os.getenv("VEXAPAY_CLIENT_ID", "vxp_957ce1bc70f5b34785933ea1")
-VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_84c0a764791906cb78399aad4e7d7590262b7493ea07a793")
-VEXAPAY_WEBHOOK_SECRET = os.getenv("VEXAPAY_WEBHOOK_SECRET", "vwh_4535956030642e92d2bfae361946d62857f38c06b174286f")
+MISTICPAY_CLIENT_ID = os.getenv("MISTICPAY_CLIENT_ID", "ci_g35d35pglvgsj39")
+MISTICPAY_CLIENT_SECRET = os.getenv("MISTICPAY_CLIENT_SECRET", "cs_xmi6kbhukucgc1syoymxugk3h")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
 ADMIN_ID = 7536040475
@@ -60,21 +58,21 @@ POLITICA_REEMBOLSO = (
 
 SALDO_USUARIOS = {}
 CACHE_CANAL = {}
-INDICACOES_USUARIOS = {} # {user_id: referrer_id}[cite: 7]
-TOTAL_INDICADOS = {}     # {user_id: count}[cite: 7]
+INDICACOES_USUARIOS = {} # {user_id: referrer_id}
+TOTAL_INDICADOS = {}     # {user_id: count}
 USUARIOS_REGISTRADOS = set()
-KEYS_GERADAS = {}        # {codigo: dados}[cite: 7]
-GIFTS_GERADOS = {}       # NOVA FUNCIONALIDADE: {codigo: dados_gift}[cite: 7]
-PREVIEW_NOTIFICACAO = {} # Variável global para a IA do notificar[cite: 7]
-LOGS_ATIVIDADES = []     # NOVA FUNCIONALIDADE: Logs de atividades globais[cite: 7]
+KEYS_GERADAS = {}        # {codigo: dados}
+GIFTS_GERADOS = {}       # NOVA FUNCIONALIDADE: {codigo: dados_gift}
+PREVIEW_NOTIFICACAO = {} # Variável global para a IA do notificar
+LOGS_ATIVIDADES = []     # NOVA FUNCIONALIDADE: Logs de atividades globais
 
-# Função para adicionar logs em tempo real[cite: 7]
+# Função para adicionar logs em tempo real
 def add_log(user_id, text):
     LOGS_ATIVIDADES.insert(0, {"id": user_id, "text": text})
     if len(LOGS_ATIVIDADES) > 50:
         LOGS_ATIVIDADES.pop()
 
-# --- CATÁLOGOS DINÂMICOS ---[cite: 7]
+# --- CATÁLOGOS DINÂMICOS ---
 CATALOGO_FERRAMENTAS = [
     {
         "id": "tool_kl_mob",
@@ -158,7 +156,7 @@ CATALOGO_CONSULTAVEL = []
 CATALOGO_LOGINS = []
 CATALOGO_CCAUXILIAR = []
 
-# --- MOTOR DE AUTOMAÇÃO E EDIFICAÇÃO DE ESTOQUE ---[cite: 7]
+# --- MOTOR DE AUTOMAÇÃO E EDIFICAÇÃO DE ESTOQUE ---
 
 def identificar_bin(cc_number: str) -> str:
     apenas_numeros = re.sub(r"\D", "", str(cc_number))
@@ -255,12 +253,43 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "vendido": card_raw.get("vendido", False),
     }
 
-ESTOQUE_BRUTO = []
+ESTOQUE_BRUTO = [
+    {
+        "id": "card_1",
+        "cc": "542819******0150|08|2028|306",
+        "categoria": "PLATINUM",
+        "tipo": "CREDIT",
+        "nome": "CRISTIANO CACHEIRO MAHIA",
+        "cpf": "03250698679",
+        "score_serasa": 496,
+        "score_bc": 352,
+        "fornecedor": "Anon",
+        "preco": 80.00,
+        "saldo_minimo": 1200.00,
+        "vendido": False,
+    },
+    {
+        "id": "card_2",
+        "cc": "544169******0487|05|2029|931",
+        "categoria": "PLATINUM",
+        "tipo": "CREDIT",
+        "nome": "ALEXANDRE CARVALHO CHANAN",
+        "cpf": "18319050006",
+        "score_serasa": 712,
+        "score_bc": 540,
+        "fornecedor": "Anon",
+        "preco": 80.00,
+        "saldo_minimo": 1200.00,
+        "vendido": False,
+    },
+]
+
 DADOS_CARTOES = [edificar_item_estoque(item) for item in ESTOQUE_BRUTO]
+
 CATALOGO_UNITARIAS = []
 
 # ==============================================================================
-# FUNÇÕES DE NAVEGAÇÃO E PAGINAÇÃO[cite: 7]
+# FUNÇÕES DE NAVEGAÇÃO E PAGINAÇÃO
 # ==============================================================================
 
 def gerenciar_paginacao_botoes(lista_itens, pagina_atual, itens_por_pagina, prefixo_nav, callback_compra):
@@ -288,7 +317,7 @@ def gerenciar_paginacao_botoes(lista_itens, pagina_atual, itens_por_pagina, pref
     return keyboard
 
 # ==============================================================================
-# SISTEMA DE LOGS ADMINISTRATIVO[cite: 7]
+# SISTEMA DE LOGS ADMINISTRATIVO (NOVA FUNCIONALIDADE)
 # ==============================================================================
 
 async def comando_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -306,8 +335,9 @@ async def comando_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
     await update.message.reply_text(texto, parse_mode="HTML")
 
+
 # ==============================================================================
-# SISTEMA DE KEYS & GIFTS ADMINISTRATIVO[cite: 7]
+# SISTEMA DE KEYS & GIFTS ADMINISTRATIVO
 # ==============================================================================
 
 async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -317,6 +347,7 @@ async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     texto = update.message.text.replace("/gerar_gift", "").strip()
     
+    # Extrair valor e quantidade (suporta variações do comando)
     val_match = re.search(r"(?:valor:\s*)?(\d+(?:[\.,]\d+)?)", texto, re.IGNORECASE)
     qtd_match = re.search(r"(?:quantidade:\s*|qtd:\s*)(\d+)", texto, re.IGNORECASE)
 
@@ -371,6 +402,7 @@ async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TY
     
     add_log(user_id, f"🎁 Resgatou Gift Card\n💰 R$ {valor_add:.2f}".replace('.', ',') + "\n✅ Adicionado")
     
+    # Formatando números sem casas malucas
     msg = (
         f"✅ Gift card resgatado com sucesso!\n\n"
         f"💰 Valor adicionado: R$ {valor_add:.0f}\n"
@@ -472,7 +504,7 @@ async def comando_resgatar_key(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(mensagem)
 
 # ==============================================================================
-# NOTIFICAÇÃO GLOBAL[cite: 7]
+# NOTIFICAÇÃO GLOBAL 
 # ==============================================================================
 
 async def comando_notificar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -579,7 +611,7 @@ async def exibir_painel_remocao(update_or_query, context, page=0, itens_por_pagi
         await update_or_query.edit_message_text(texto, reply_markup=reply_markup, parse_mode="HTML")
 
 # ==============================================================================
-# INSERÇÃO DINÂMICA DE ESTOQUE POR COMANDOS ADMINISTRATIVOS[cite: 7]
+# INSERÇÃO DINÂMICA DE ESTOQUE POR COMANDOS ADMINISTRATIVOS
 # ==============================================================================
 
 async def painel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -768,26 +800,23 @@ async def anti_sleep_ping():
             except Exception:
                 pass
 
-# ==============================================================================
-# NOVA INTEGRAÇÃO VEXAPAY (Substituindo MisticPay)
-# ==============================================================================
-async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
-    url = "https://vexapay.site/api/v1/charges"
+async def gerar_pix_misticpay(valor: float, telegram_id: int, nome_usuario: str):
+    url = "https://api.misticpay.com/api/transactions/create"
     headers = {
-        "Authorization": f"Bearer {VEXAPAY_CLIENT_SECRET.strip()}",
-        "X-Client-Id": VEXAPAY_CLIENT_ID.strip(),
+        "ci": MISTICPAY_CLIENT_ID.strip(),
+        "cs": MISTICPAY_CLIENT_SECRET.strip(),
         "Content-Type": "application/json",
     }
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
     payload = {
         "amount": float(valor),
-        "external_id": transaction_id,
-        "payer": {
-            "name": nome_usuario if nome_usuario else f"Cliente_{telegram_id}",
-            "document": gerar_cpf_valido()
-        },
-        "description": f"Deposito Saldo Bot User {telegram_id}"
+        "payerName": nome_usuario if nome_usuario else f"Cliente_{telegram_id}",
+        "payerDocument": gerar_cpf_valido(),
+        "transactionId": transaction_id,
+        "description": f"Deposito Saldo Bot User {telegram_id}",
+        "projectWebhook": f"{WEBHOOK_BASE_URL.rstrip('/')}/misticpay-webhook",
+        "expiresIn": 1800
     }
 
     try:
@@ -795,8 +824,8 @@ async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
             response = await client.post(url, json=payload, headers=headers, timeout=10.0)
             if response.status_code in [200, 201]:
                 res = response.json()
-                data_obj = res.get("data", res)
-                pix_code = data_obj.get("copyPaste") or data_obj.get("qrcodeUrl") or data_obj.get("qrCodeBase64") or data_obj.get("payload") or data_obj.get("pixCopiaECola")
+                data_obj = res.get("data", {})
+                pix_code = data_obj.get("copyPaste") or data_obj.get("qrcodeUrl") or data_obj.get("qrCodeBase64")
                 if pix_code:
                     return {"pix_code": pix_code}
             return {"erro": f"Status {response.status_code}: {response.text}"}
@@ -816,7 +845,7 @@ async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     except Exception:
         return False
 
-# --- FUNÇÃO AUXILIAR SEGURA PARA ATUALIZAR TELA ---[cite: 7]
+# --- FUNÇÃO AUXILIAR SEGURA PARA ATUALIZAR TELA ---
 async def responder_ou_editar(query, texto, reply_markup, parse_mode="HTML"):
     try:
         if query.message.photo:
@@ -945,9 +974,7 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     add_log(user_id, f"💳 Gerou QR Code Pix (R$ {valor:.2f})".replace('.', ','))
-    
-    # Integração com a nova Gateway VexaPay
-    dados_pix = await gerar_pix_vexapay(valor, user_id, user.first_name)
+    dados_pix = await gerar_pix_misticpay(valor, user_id, user.first_name)
     
     if dados_pix and "pix_code" in dados_pix:
         pix_code = dados_pix["pix_code"]
@@ -981,7 +1008,7 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif dados_pix and "erro" in dados_pix:
         await update.message.reply_text(
-            f"🔹 <b>CASABLANCA SHOP | ERRO PIX</b> 🔹\n\n❌ <b>Retorno Gateway:</b>\n<code>{dados_pix['erro']}</code>",
+            f"🔹 <b>CASABLANCA SHOP | ERRO PIX</b> 🔹\n\n❌ <b>Retorno MisticPay:</b>\n<code>{dados_pix['erro']}</code>",
             parse_mode="HTML",
             reply_to_message_id=msg_id
         )
@@ -1229,10 +1256,12 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         texto = f"🔹 <b>CASABLANCA SHOP | CC FULL DADOS</b> 🔹\n\nInformações:\n- Saldo: R$ {saldo_fmt}"
         await responder_ou_editar(query, texto, InlineKeyboardMarkup(keyboard))
 
+    # --- CORREÇÃO BUG 1: ORGANIZAÇÃO CORRETA DA CATÉGORIA ---
     elif data == "ver_unitarias":
         estoque_agrupado = {}
         for c in DADOS_CARTOES:
             if not c.get("vendido"):
+                # Agrupa apena pela categoria correta ignorando preço para não duplicar slot
                 cat = c.get("categoria_produto", "STANDARD").upper()
                 preco = c.get("preco", 80.0)
                 
@@ -1247,6 +1276,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for cat, info in estoque_agrupado.items():
             qtd = info["qtd"]
             preco_min = info["preco_min"]
+            # Envia diretamente pro index 0 daquela categoria específica
             keyboard.append([InlineKeyboardButton(f"R$ {preco_min:.0f} {cat} ({qtd})", callback_data=f"nav_cat_{cat}_0")])
             
         if not keyboard:
@@ -1663,7 +1693,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await enviar_menu_principal(update, context)
 
 # ==============================================================================
-# FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM) - LOTE E DINÂMICO MASSIVO[cite: 7]
+# CORREÇÃO BUG 2: FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM) - LOTE E DINÂMICO MASSIVO
 # ==============================================================================
 async def add_estoque(update, context):
     user_id = update.effective_user.id
@@ -1701,18 +1731,17 @@ async def add_estoque(update, context):
 
     for idx, bloco in enumerate(blocos, start=1):
         try:
-            cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", bloco, re.IGNORECASE)
-            banco_match = re.search(r"Banco:\s*([^\n]+)", bloco, re.IGNORECASE)
-            
-            # ATENÇÃO - GARANTIA DA EXTRAÇÃO EXATA DA CATEGORIA:
-            categoria_match = re.search(r"Categoria:\s*([^\n]+)", bloco, re.IGNORECASE)
-            categoria_final = categoria_match.group(1).strip().upper() if categoria_match else "STANDARD"
+            cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", bloco)
+            banco_match = re.search(r"Banco:\s*([^\n]+)", bloco)
+            nivel_match = re.search(r"Categoria:\s*([^\n]+)", bloco)
+            tipo_match = re.search(r"Tipo:\s*([^\n]+)", bloco)
+            nome_match = re.search(r"Nome:\s*([^\n]+)", bloco)
+            cpf_match = re.search(r"CPF:\s*([^\n]+)", bloco)
+            preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", bloco)
+            saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", bloco)
 
-            tipo_match = re.search(r"Tipo:\s*([^\n]+)", bloco, re.IGNORECASE)
-            nome_match = re.search(r"Nome:\s*([^\n]+)", bloco, re.IGNORECASE)
-            cpf_match = re.search(r"CPF:\s*([^\n]+)", bloco, re.IGNORECASE)
-            preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", bloco, re.IGNORECASE)
-            saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", bloco, re.IGNORECASE)
+            tipo_produto_match = re.findall(r"Categoria:\s*([^\n]+)", bloco)
+            categoria_final = tipo_produto_match[-1].strip() if len(tipo_produto_match) > 1 else (nivel_match.group(1).strip() if nivel_match else "STANDARD")
 
             if not cartao_match:
                 com_erro += 1
@@ -1727,8 +1756,8 @@ async def add_estoque(update, context):
                 "cc": cartao_match.group(1).strip(),
                 "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
                 "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
-                "categoria": categoria_final,
-                "categoria_produto": categoria_final,
+                "categoria": categoria_final,  # <--- CORREÇÃO DEFINITIVA BUG 1 e 2
+                "categoria_produto": categoria_final, # <--- CORREÇÃO DEFINITIVA BUG 1 e 2
                 "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
                 "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
                 "cpf": cpf_match.group(1).strip() if cpf_match else "",
@@ -1803,50 +1832,41 @@ async def telegram_webhook(request: Request):
     await telegram_app.process_update(update)
     return {"status": "ok"}
 
-@app.post("/webhook/vexapay")
-async def vexapay_webhook(request: Request):
+@app.post("/misticpay-webhook")
+async def misticpay_webhook(request: Request):
     try:
         payload = await request.json()
-        
-        # Adaptação para suportar os padrões de retorno da VexaPay
-        status = payload.get("status", "").upper()
-        value = float(payload.get("value", payload.get("amount", 0)))
-        description = payload.get("description", payload.get("external_id", payload.get("transactionId", "")))
+        status = payload.get("status")
+        value = float(payload.get("value", 0))
+        description = payload.get("description", "")
 
-        # Status de sucesso genéricos para gateways
-        if status in ["COMPLETO", "PAID", "APPROVED", "CONFIRMED", "SUCESSO", "SUCCESS"] and ("User " in description or "tx_" in description):
-            user_id = None
-            if "User " in description:
-                user_id = int(description.split("User ")[1])
-            elif "tx_" in description:
-                user_id = int(description.split("tx_")[1].split("_")[0])
-                
-            if user_id:
-                SALDO_USUARIOS[user_id] = SALDO_USUARIOS.get(user_id, 0.0) + value
+        if status == "COMPLETO" and "User " in description:
+            user_id = int(description.split("User ")[1])
+            SALDO_USUARIOS[user_id] = SALDO_USUARIOS.get(user_id, 0.0) + value
 
-                add_log(user_id, f"💰 Recebeu Depósito Pix\n💰 R$ {value:.2f}".replace('.', ',') + "\n✅ Pago")
+            add_log(user_id, f"💰 Recebeu Depósito Pix\n💰 R$ {value:.2f}".replace('.', ',') + "\n✅ Pago")
 
-                referrer_id = INDICACOES_USUARIOS.get(user_id)
-                if referrer_id:
-                    TOTAL_INDICADOS[referrer_id] = TOTAL_INDICADOS.get(referrer_id, 0) + 1
-                    INDICACOES_USUARIOS.pop(user_id, None) 
-                    SALDO_USUARIOS[referrer_id] = SALDO_USUARIOS.get(referrer_id, 0.0) + 1.00
-                    try:
-                        await telegram_app.bot.send_message(
-                            chat_id=referrer_id,
-                            text=f"🎁 <b>PARABÉNS!</b> Um dos seus indicados realizou um depósito e você ganhou <b>R$ 1,00</b> de bônus em saldo!",
-                            parse_mode="HTML"
-                        )
-                    except Exception:
-                        pass
+            referrer_id = INDICACOES_USUARIOS.get(user_id)
+            if referrer_id:
+                TOTAL_INDICADOS[referrer_id] = TOTAL_INDICADOS.get(referrer_id, 0) + 1
+                INDICACOES_USUARIOS.pop(user_id, None) 
+                SALDO_USUARIOS[referrer_id] = SALDO_USUARIOS.get(referrer_id, 0.0) + 1.00
+                try:
+                    await telegram_app.bot.send_message(
+                        chat_id=referrer_id,
+                        text=f"🎁 <b>PARABÉNS!</b> Um dos seus indicados realizou um depósito e você ganhou <b>R$ 1,00</b> de bônus em saldo!",
+                        parse_mode="HTML"
+                    )
+                except Exception:
+                    pass
 
-                valor_fmt = f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                texto_sucesso = (
-                    f"🔹 <b>CASABLANCA SHOP | PAGAMENTO CONFIRMADO</b> 🔹\n\n"
-                    f"Foi creditado <b>R$ {valor_fmt}</b> na sua conta."
-                )
+            valor_fmt = f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            texto_sucesso = (
+                f"🔹 <b>CASABLANCA SHOP | PAGAMENTO CONFIRMADO</b> 🔹\n\n"
+                f"Foi creditado <b>R$ {valor_fmt}</b> na sua conta."
+            )
 
-                await telegram_app.bot.send_message(chat_id=user_id, text=texto_sucesso, parse_mode="HTML")
+            await telegram_app.bot.send_message(chat_id=user_id, text=texto_sucesso, parse_mode="HTML")
 
         return {"status": "ok"}
     except Exception as e:
