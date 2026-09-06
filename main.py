@@ -42,9 +42,9 @@ CAPA_PATH = "capa.jpg"
 
 THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
-# Novas Configurações da VexaPay
+# Credenciais VexaPay 
 VEXAPAY_CLIENT_ID = os.getenv("VEXAPAY_CLIENT_ID", "vxp_957ce1bc70f5b34785933ea1")
-VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_81be074cdddd50badb77e7623f3f328e6eea7cc17a0c5be6")
+VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_84c0a764791906cb78399aad4e7d7590262b7493ea07a793")
 VEXAPAY_WEBHOOK_SECRET = os.getenv("VEXAPAY_WEBHOOK_SECRET", "vwh_4535956030642e92d2bfae361946d62857f38c06b174286f")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
@@ -211,6 +211,8 @@ def edificar_item_estoque(card_raw: dict) -> dict:
     bin_extraida = identificar_bin(cc_bruto)
     banco_auto = card_raw.get("banco", identificar_banco_por_bin(bin_extraida))
     bandeira_auto = card_raw.get("bandeira", identificar_bandeira(bin_extraida))
+    
+    # Pega exatamente a categoria extraída do comando para evitar formatações incorretas de STANDARD
     categoria_exata = card_raw.get("categoria", "STANDARD").upper()
 
     return {
@@ -306,7 +308,7 @@ async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE)
     quantidade = int(qtd_match.group(1)) if qtd_match else 1
 
     letras_num = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    codigo = "".join(random.choices(letras_num, k=7)) # Ex: P0L8340
+    codigo = "".join(random.choices(letras_num, k=7))
     
     GIFTS_GERADOS[codigo] = {
         "valor": valor,
@@ -1225,10 +1227,12 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         texto = f"🔹 <b>CASABLANCA SHOP | CC FULL DADOS</b> 🔹\n\nInformações:\n- Saldo: R$ {saldo_fmt}"
         await responder_ou_editar(query, texto, InlineKeyboardMarkup(keyboard))
 
+    # --- CORREÇÃO BUG 1: ORGANIZAÇÃO CORRETA DA CATÉGORIA ---
     elif data == "ver_unitarias":
         estoque_agrupado = {}
         for c in DADOS_CARTOES:
             if not c.get("vendido"):
+                # Agrupa apena pela categoria correta ignorando preço para não duplicar slot
                 cat = c.get("categoria_produto", "STANDARD").upper()
                 preco = c.get("preco", 80.0)
                 
@@ -1243,6 +1247,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for cat, info in estoque_agrupado.items():
             qtd = info["qtd"]
             preco_min = info["preco_min"]
+            # Envia diretamente pro index 0 daquela categoria específica
             keyboard.append([InlineKeyboardButton(f"R$ {preco_min:.0f} {cat} ({qtd})", callback_data=f"nav_cat_{cat}_0")])
             
         if not keyboard:
@@ -1671,11 +1676,14 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
+    # Remover o comando da string
     texto_bruto = re.sub(r"^/add_estoque_ccfullldados\s*", "", texto_bruto, flags=re.IGNORECASE)
     texto_bruto = re.sub(r"^/add_estoque\s*", "", texto_bruto, flags=re.IGNORECASE)
     
+    # Limpando caso o usuário cole com "=== ESTOQUE ==="
     texto_limpo = texto_bruto.replace("=== ESTOQUE ===", "")
     
+    # Dividir texto massivo usando a string "Número do Cartão:"
     chunks = re.split(r"(?i)Número do Cartão:", texto_limpo)
     
     blocos = []
@@ -1697,6 +1705,7 @@ async def add_estoque(update, context):
             cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", bloco, re.IGNORECASE)
             banco_match = re.search(r"Banco:\s*([^\n]+)", bloco, re.IGNORECASE)
             
+            # ATENÇÃO - GARANTIA DA EXTRAÇÃO EXATA DA CATEGORIA:
             categoria_match = re.search(r"Categoria:\s*([^\n]+)", bloco, re.IGNORECASE)
             categoria_final = categoria_match.group(1).strip().upper() if categoria_match else "STANDARD"
 
@@ -1719,8 +1728,8 @@ async def add_estoque(update, context):
                 "cc": cartao_match.group(1).strip(),
                 "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
                 "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
-                "categoria": categoria_final,
-                "categoria_produto": categoria_final,
+                "categoria": categoria_final,  # <--- CORREÇÃO DEFINITIVA BUG 1 e 2
+                "categoria_produto": categoria_final, # <--- CORREÇÃO DEFINITIVA BUG 1 e 2
                 "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
                 "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
                 "cpf": cpf_match.group(1).strip() if cpf_match else "",
@@ -1800,10 +1809,12 @@ async def vexapay_webhook(request: Request):
     try:
         payload = await request.json()
         
+        # Adaptação para suportar os padrões de retorno da VexaPay
         status = payload.get("status", "").upper()
         value = float(payload.get("value", payload.get("amount", 0)))
         description = payload.get("description", payload.get("external_id", payload.get("transactionId", "")))
 
+        # Status de sucesso genéricos para gateways
         if status in ["COMPLETO", "PAID", "APPROVED", "CONFIRMED", "SUCESSO", "SUCCESS"] and ("User " in description or "tx_" in description):
             user_id = None
             if "User " in description:
