@@ -42,9 +42,8 @@ CAPA_PATH = "capa.jpg"
 
 THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
-# Credenciais ÚNICAS do VexaPay
-VEXAPAY_CLIENT_ID = os.getenv("VEXAPAY_CLIENT_ID", "vxp_957ce1bc70f5b34785933ea1")
-VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_84c0a764791906cb78399aad4e7d7590262b7493ea07a793")
+# Novas Configurações da API MYCASH
+MYCASH_API_KEY = os.getenv("MYCASH_API_KEY", "sk_live_5hUpxSNZBziH1ss3a1KWcI4qsT5uLZAA") # Chave Padrão ou do Render
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
 ADMIN_ID = 7536040475
@@ -65,7 +64,7 @@ USUARIOS_REGISTRADOS = set()
 KEYS_GERADAS = {}        # {codigo: dados}
 GIFTS_GERADOS = {}       # NOVA FUNCIONALIDADE: {codigo: dados_gift}
 PREVIEW_NOTIFICACAO = {} # Variável global para a IA do notificar
-LOGS_ATIVIDADES = []     # Logs de atividades globais
+LOGS_ATIVIDADES = []     # NOVA FUNCIONALIDADE: Logs de atividades globais
 
 # Função para adicionar logs em tempo real
 def add_log(user_id, text):
@@ -205,14 +204,33 @@ def identificar_banco_por_bin(bin_code: str) -> str:
     else:
         return "BANCO DESCONHECIDO"
 
+def identificar_nivel(categoria_raw: str) -> str:
+    cat = str(categoria_raw).upper().strip()
+    if "BLACK" in cat:
+        return "BLACK"
+    elif "INFINITE" in cat:
+        return "INFINITE"
+    elif "PLATINUM" in cat:
+        return "PLATINUM"
+    elif "GOLD" in cat or "OURO" in cat:
+        return "GOLD"
+    elif "STANDARD" in cat:
+        return "STANDARD"
+    elif "CLASSIC" in cat:
+        return "CLASSIC"
+    elif "BUSINESS" in cat:
+        return "BUSINESS"
+    elif "ELO" in cat:
+        return "ELO"
+    else:
+        return cat if cat else "STANDARD"
+
 def edificar_item_estoque(card_raw: dict) -> dict:
     cc_bruto = card_raw.get("cc", "")
     bin_extraida = identificar_bin(cc_bruto)
     banco_auto = card_raw.get("banco", identificar_banco_por_bin(bin_extraida))
     bandeira_auto = card_raw.get("bandeira", identificar_bandeira(bin_extraida))
-    
-    # Pega exatamente a categoria extraída do comando para evitar formatações incorretas de STANDARD
-    categoria_exata = card_raw.get("categoria", "STANDARD").upper()
+    nivel_auto = identificar_nivel(card_raw.get("categoria", ""))
 
     return {
         "id": card_raw.get("id"),
@@ -221,9 +239,9 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "bin": bin_extraida,
         "banco": banco_auto,
         "bandeira": bandeira_auto,
-        "categoria": categoria_exata,
-        "categoria_produto": categoria_exata,
-        "nivel_formatado": categoria_exata,
+        "categoria": card_raw.get("categoria", card_raw.get("nivel", "STANDARD")).upper(),
+        "categoria_produto": card_raw.get("categoria_produto", card_raw.get("categoria", card_raw.get("nivel", "STANDARD"))).upper(),
+        "nivel_formatado": nivel_auto,
         "tipo": card_raw.get("tipo", "CREDIT").upper(),
         "nome": card_raw.get("nome", "NÃO INFORMADO").upper(),
         "cpf": re.sub(r"\D", "", str(card_raw.get("cpf", ""))),
@@ -286,6 +304,7 @@ async def comando_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
     await update.message.reply_text(texto, parse_mode="HTML")
 
+
 # ==============================================================================
 # SISTEMA DE KEYS & GIFTS ADMINISTRATIVO
 # ==============================================================================
@@ -297,6 +316,7 @@ async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     texto = update.message.text.replace("/gerar_gift", "").strip()
     
+    # Extrair valor e quantidade (suporta variações do comando)
     val_match = re.search(r"(?:valor:\s*)?(\d+(?:[\.,]\d+)?)", texto, re.IGNORECASE)
     qtd_match = re.search(r"(?:quantidade:\s*|qtd:\s*)(\d+)", texto, re.IGNORECASE)
 
@@ -307,7 +327,7 @@ async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE)
     quantidade = int(qtd_match.group(1)) if qtd_match else 1
 
     letras_num = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    codigo = "".join(random.choices(letras_num, k=7))
+    codigo = "".join(random.choices(letras_num, k=7)) # Ex: P0L8340
     
     GIFTS_GERADOS[codigo] = {
         "valor": valor,
@@ -335,7 +355,7 @@ async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TY
     codigo = context.args[0].strip().upper()
     
     if codigo not in GIFTS_GERADOS:
-        return await update.message.reply_text("❌ Gift card inválido ou não encontrado.")
+        return await update.message.reply_text("❌ Gift card inválido ou não encontrada.")
         
     gift = GIFTS_GERADOS[codigo]
     
@@ -351,6 +371,7 @@ async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TY
     
     add_log(user_id, f"🎁 Resgatou Gift Card\n💰 R$ {valor_add:.2f}".replace('.', ',') + "\n✅ Adicionado")
     
+    # Formatando números sem casas malucas
     msg = (
         f"✅ Gift card resgatado com sucesso!\n\n"
         f"💰 Valor adicionado: R$ {valor_add:.0f}\n"
@@ -717,13 +738,6 @@ async def add_estoque_ccauxiliar(update: Update, context: ContextTypes.DEFAULT_T
     add_log(user_id, f"👑 Adicionou item CC AUXILIAR ao estoque")
     await update.message.reply_text(f"✅ <b>CC Auxiliar adicionado com sucesso ao catálogo!</b>\n\n💳 {nome} - R$ {preco:.2f}", parse_mode="HTML")
 
-def gerar_cpf_valido() -> str:
-    cpf = [random.randint(0, 9) for _ in range(9)]
-    for _ in range(2):
-        val = sum([(len(cpf) + 1 - i) * v for i, v in enumerate(cpf)]) % 11
-        cpf.append(0 if val < 2 else 11 - val)
-    return "".join(map(str, cpf))
-
 telegram_app = Application.builder().token(TOKEN).build()
 
 async def expirador_pix(chat_id: int, message_id: int, valor: float, segundos: int = 1800):
@@ -749,26 +763,23 @@ async def anti_sleep_ping():
                 pass
 
 # ==============================================================================
-# INTEGRAÇÃO NATIVA VEXAPAY (EXCLUSIVA)
+# NOVA INTEGRAÇÃO MYCASH API (EXCLUSIVA E NATIVA)
 # ==============================================================================
-async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
-    url = "https://vexapay.site/api/v1/charges"
+async def gerar_pix_mycash(valor: float, telegram_id: int):
+    url = "https://mycash.cc/api/v1/pix/generate"
     headers = {
-        "Accept": "application/json",
+        "Authorization": f"Bearer {MYCASH_API_KEY.strip()}",
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {VEXAPAY_CLIENT_SECRET.strip()}",
-        "X-Client-Id": VEXAPAY_CLIENT_ID.strip()
+        "Accept": "application/json"
     }
+    
+    # Criamos a ID da transação vinculada ao UserID do cliente para reconhecer o pagamento depois
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
     payload = {
         "amount": round(float(valor), 2),
-        "external_id": transaction_id,
-        "payer": {
-            "name": nome_usuario if nome_usuario else f"Cliente_{telegram_id}",
-            "document": gerar_cpf_valido()
-        },
-        "description": f"tx_{telegram_id}_{int(time.time())}"
+        "reference": transaction_id, 
+        "description": f"Deposito Saldo Bot User {telegram_id}"
     }
 
     try:
@@ -777,19 +788,15 @@ async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
             if response.status_code in [200, 201]:
                 res = response.json()
                 
-                # Extração rigorosa baseada na documentação VexaPay
-                pix_code = res.get("pix_copy_paste") or res.get("qr_code_base64")
+                # A API MyCash retorna o copia e cola direto na chave pix_code 
+                pix_code = res.get("pix_code")
                 
-                if not pix_code and "data" in res:
-                    data_obj = res["data"]
-                    pix_code = data_obj.get("pix_copy_paste") or data_obj.get("qr_code_base64")
-
                 if pix_code:
                     return {"pix_code": pix_code}
             
             return {"erro": f"Status {response.status_code}: {response.text}"}
     except Exception as e:
-        return {"erro": f"Falha de conexão: {str(e)}"}
+        return {"erro": f"Falha de conexão com a MyCash: {str(e)}"}
 
 async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     agora = time.time()
@@ -933,11 +940,13 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     add_log(user_id, f"💳 Gerou QR Code Pix (R$ {valor:.2f})".replace('.', ','))
     
-    # Chamada unicamente para VexaPay
-    dados_pix = await gerar_pix_vexapay(valor, user_id, user.first_name)
+    # Processamento do PIX usando apenas a MyCash API
+    dados_pix = await gerar_pix_mycash(valor, user_id)
     
     if dados_pix and "pix_code" in dados_pix:
         pix_code = dados_pix["pix_code"]
+        
+        # O QRCode continua sendo desenhado na hora
         qr_img = qrcode.make(pix_code)
         img_buffer = io.BytesIO()
         qr_img.save(img_buffer, format="PNG")
@@ -959,6 +968,7 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_to_message_id=msg_id
         )
 
+        # O expiração de 30 minutos continua intacta
         asyncio.create_task(expirador_pix(
             chat_id=msg_enviada.chat_id,
             message_id=msg_enviada.message_id,
@@ -1662,11 +1672,14 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
+    # Remover o comando da string
     texto_bruto = re.sub(r"^/add_estoque_ccfullldados\s*", "", texto_bruto, flags=re.IGNORECASE)
     texto_bruto = re.sub(r"^/add_estoque\s*", "", texto_bruto, flags=re.IGNORECASE)
     
+    # Limpando caso o usuário cole com "=== ESTOQUE ==="
     texto_limpo = texto_bruto.replace("=== ESTOQUE ===", "")
     
+    # Dividir texto massivo usando a string "Número do Cartão:"
     chunks = re.split(r"(?i)Número do Cartão:", texto_limpo)
     
     blocos = []
@@ -1710,7 +1723,7 @@ async def add_estoque(update, context):
                 "cc": cartao_match.group(1).strip(),
                 "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
                 "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
-                "categoria": categoria_final,  
+                "categoria": categoria_final,
                 "categoria_produto": categoria_final, 
                 "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
                 "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
@@ -1786,22 +1799,19 @@ async def telegram_webhook(request: Request):
     await telegram_app.process_update(update)
     return {"status": "ok"}
 
-@app.post("/webhook/vexapay")
-async def vexapay_webhook(request: Request):
+@app.post("/webhook/mycash")
+async def mycash_webhook(request: Request):
     try:
         payload = await request.json()
         
-        # A VexaPay pode enviar o objeto inteiro na raiz ou dentro de "data" ou "charge"
-        charge_data = payload.get("data", payload.get("charge", payload))
+        status = payload.get("status", "").lower()
+        value = float(payload.get("amount", 0))
+        reference = payload.get("reference", payload.get("tx_id", ""))
 
-        status = charge_data.get("status", "").upper()
-        value = float(charge_data.get("amount", charge_data.get("value", 0)))
-        external_id = charge_data.get("external_id", "")
-
-        if status in ["PAID", "APPROVED", "COMPLETED", "COMPLETO", "CONFIRMED", "SUCESSO", "SUCCESS"] and "tx_" in external_id:
+        if status in ["paid", "completed", "completed/paid", "approved", "sucesso", "success"] and "tx_" in reference:
             user_id = None
             try:
-                user_id = int(external_id.split("tx_")[1].split("_")[0])
+                user_id = int(reference.split("tx_")[1].split("_")[0])
             except:
                 pass
                 
