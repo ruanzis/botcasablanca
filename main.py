@@ -45,7 +45,6 @@ THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 # Credenciais ÚNICAS do VexaPay
 VEXAPAY_CLIENT_ID = os.getenv("VEXAPAY_CLIENT_ID", "vxp_957ce1bc70f5b34785933ea1")
 VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_84c0a764791906cb78399aad4e7d7590262b7493ea07a793")
-VEXAPAY_WEBHOOK_SECRET = os.getenv("VEXAPAY_WEBHOOK_SECRET", "vwh_4535956030642e92d2bfae361946d62857f38c06b174286f")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
 ADMIN_ID = 7536040475
@@ -750,15 +749,15 @@ async def anti_sleep_ping():
                 pass
 
 # ==============================================================================
-# INTEGRAÇÃO VEXAPAY EXCLUSIVA E DEFINITIVA
+# INTEGRAÇÃO NATIVA VEXAPAY (EXCLUSIVA)
 # ==============================================================================
 async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
     url = "https://vexapay.site/api/v1/charges"
     headers = {
-        "Authorization": f"Bearer {VEXAPAY_CLIENT_SECRET.strip()}",
-        "X-Client-Id": VEXAPAY_CLIENT_ID.strip(),
-        "Content-Type": "application/json",
         "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {VEXAPAY_CLIENT_SECRET.strip()}",
+        "X-Client-Id": VEXAPAY_CLIENT_ID.strip()
     }
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
@@ -778,12 +777,12 @@ async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
             if response.status_code in [200, 201]:
                 res = response.json()
                 
-                # A VexaPay retorna pix_copy_paste ou similar
-                pix_code = res.get("pix_copy_paste") or res.get("pixCopiaECola") or res.get("qr_code") or res.get("qrCodeBase64") or res.get("copyPaste")
+                # Extração rigorosa baseada na documentação VexaPay
+                pix_code = res.get("pix_copy_paste") or res.get("qr_code_base64")
                 
                 if not pix_code and "data" in res:
                     data_obj = res["data"]
-                    pix_code = data_obj.get("pix_copy_paste") or data_obj.get("pixCopiaECola") or data_obj.get("copyPaste") or data_obj.get("qrCodeBase64")
+                    pix_code = data_obj.get("pix_copy_paste") or data_obj.get("qr_code_base64")
 
                 if pix_code:
                     return {"pix_code": pix_code}
@@ -934,6 +933,7 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     add_log(user_id, f"💳 Gerou QR Code Pix (R$ {valor:.2f})".replace('.', ','))
     
+    # Chamada unicamente para VexaPay
     dados_pix = await gerar_pix_vexapay(valor, user_id, user.first_name)
     
     if dados_pix and "pix_code" in dados_pix:
@@ -1662,14 +1662,11 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
-    # Remover o comando da string
     texto_bruto = re.sub(r"^/add_estoque_ccfullldados\s*", "", texto_bruto, flags=re.IGNORECASE)
     texto_bruto = re.sub(r"^/add_estoque\s*", "", texto_bruto, flags=re.IGNORECASE)
     
-    # Limpando caso o usuário cole com "=== ESTOQUE ==="
     texto_limpo = texto_bruto.replace("=== ESTOQUE ===", "")
     
-    # Dividir texto massivo usando a string "Número do Cartão:"
     chunks = re.split(r"(?i)Número do Cartão:", texto_limpo)
     
     blocos = []
@@ -1713,8 +1710,8 @@ async def add_estoque(update, context):
                 "cc": cartao_match.group(1).strip(),
                 "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
                 "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
-                "categoria": categoria_final,
-                "categoria_produto": categoria_final,
+                "categoria": categoria_final,  
+                "categoria_produto": categoria_final, 
                 "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
                 "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
                 "cpf": cpf_match.group(1).strip() if cpf_match else "",
@@ -1794,14 +1791,17 @@ async def vexapay_webhook(request: Request):
     try:
         payload = await request.json()
         
-        status = payload.get("status", "").upper()
-        value = float(payload.get("amount", payload.get("value", 0)))
-        description = payload.get("external_id", payload.get("description", ""))
+        # A VexaPay pode enviar o objeto inteiro na raiz ou dentro de "data" ou "charge"
+        charge_data = payload.get("data", payload.get("charge", payload))
 
-        if status in ["PAID", "APPROVED", "COMPLETED", "COMPLETO", "CONFIRMED", "SUCESSO", "SUCCESS"] and "tx_" in description:
+        status = charge_data.get("status", "").upper()
+        value = float(charge_data.get("amount", charge_data.get("value", 0)))
+        external_id = charge_data.get("external_id", "")
+
+        if status in ["PAID", "APPROVED", "COMPLETED", "COMPLETO", "CONFIRMED", "SUCESSO", "SUCCESS"] and "tx_" in external_id:
             user_id = None
             try:
-                user_id = int(description.split("tx_")[1].split("_")[0])
+                user_id = int(external_id.split("tx_")[1].split("_")[0])
             except:
                 pass
                 
