@@ -42,7 +42,7 @@ CAPA_PATH = "capa.jpg"
 
 THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
-# Novas Configurações da API MYCASH
+# Nova Configuração da API MYCASH
 MYCASH_API_KEY = os.getenv("MYCASH_API_KEY", "sk_live_5hUpxSNZBziH1ss3a1KWcI4qsT5uLZAA") # Chave Padrão ou do Render
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
@@ -204,33 +204,13 @@ def identificar_banco_por_bin(bin_code: str) -> str:
     else:
         return "BANCO DESCONHECIDO"
 
-def identificar_nivel(categoria_raw: str) -> str:
-    cat = str(categoria_raw).upper().strip()
-    if "BLACK" in cat:
-        return "BLACK"
-    elif "INFINITE" in cat:
-        return "INFINITE"
-    elif "PLATINUM" in cat:
-        return "PLATINUM"
-    elif "GOLD" in cat or "OURO" in cat:
-        return "GOLD"
-    elif "STANDARD" in cat:
-        return "STANDARD"
-    elif "CLASSIC" in cat:
-        return "CLASSIC"
-    elif "BUSINESS" in cat:
-        return "BUSINESS"
-    elif "ELO" in cat:
-        return "ELO"
-    else:
-        return cat if cat else "STANDARD"
-
 def edificar_item_estoque(card_raw: dict) -> dict:
     cc_bruto = card_raw.get("cc", "")
     bin_extraida = identificar_bin(cc_bruto)
     banco_auto = card_raw.get("banco", identificar_banco_por_bin(bin_extraida))
     bandeira_auto = card_raw.get("bandeira", identificar_bandeira(bin_extraida))
-    nivel_auto = identificar_nivel(card_raw.get("categoria", ""))
+    
+    categoria_exata = card_raw.get("categoria", "STANDARD").upper()
 
     return {
         "id": card_raw.get("id"),
@@ -239,9 +219,9 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "bin": bin_extraida,
         "banco": banco_auto,
         "bandeira": bandeira_auto,
-        "categoria": card_raw.get("categoria", card_raw.get("nivel", "STANDARD")).upper(),
-        "categoria_produto": card_raw.get("categoria_produto", card_raw.get("categoria", card_raw.get("nivel", "STANDARD"))).upper(),
-        "nivel_formatado": nivel_auto,
+        "categoria": categoria_exata,
+        "categoria_produto": categoria_exata,
+        "nivel_formatado": categoria_exata,
         "tipo": card_raw.get("tipo", "CREDIT").upper(),
         "nome": card_raw.get("nome", "NÃO INFORMADO").upper(),
         "cpf": re.sub(r"\D", "", str(card_raw.get("cpf", ""))),
@@ -253,36 +233,7 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "vendido": card_raw.get("vendido", False),
     }
 
-ESTOQUE_BRUTO = [
-    {
-        "id": "card_1",
-        "cc": "542819******0150|08|2028|306",
-        "categoria": "PLATINUM",
-        "tipo": "CREDIT",
-        "nome": "CRISTIANO CACHEIRO MAHIA",
-        "cpf": "03250698679",
-        "score_serasa": 496,
-        "score_bc": 352,
-        "fornecedor": "Anon",
-        "preco": 80.00,
-        "saldo_minimo": 1200.00,
-        "vendido": False,
-    },
-    {
-        "id": "card_2",
-        "cc": "544169******0487|05|2029|931",
-        "categoria": "PLATINUM",
-        "tipo": "CREDIT",
-        "nome": "ALEXANDRE CARVALHO CHANAN",
-        "cpf": "18319050006",
-        "score_serasa": 712,
-        "score_bc": 540,
-        "fornecedor": "Anon",
-        "preco": 80.00,
-        "saldo_minimo": 1200.00,
-        "vendido": False,
-    },
-]
+ESTOQUE_BRUTO = []
 DADOS_CARTOES = [edificar_item_estoque(item) for item in ESTOQUE_BRUTO]
 CATALOGO_UNITARIAS = []
 
@@ -333,7 +284,6 @@ async def comando_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
     await update.message.reply_text(texto, parse_mode="HTML")
 
-
 # ==============================================================================
 # SISTEMA DE KEYS & GIFTS ADMINISTRATIVO
 # ==============================================================================
@@ -345,7 +295,6 @@ async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     texto = update.message.text.replace("/gerar_gift", "").strip()
     
-    # Extrair valor e quantidade (suporta variações do comando)
     val_match = re.search(r"(?:valor:\s*)?(\d+(?:[\.,]\d+)?)", texto, re.IGNORECASE)
     qtd_match = re.search(r"(?:quantidade:\s*|qtd:\s*)(\d+)", texto, re.IGNORECASE)
 
@@ -356,7 +305,7 @@ async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE)
     quantidade = int(qtd_match.group(1)) if qtd_match else 1
 
     letras_num = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    codigo = "".join(random.choices(letras_num, k=7)) # Ex: P0L8340
+    codigo = "".join(random.choices(letras_num, k=7))
     
     GIFTS_GERADOS[codigo] = {
         "valor": valor,
@@ -384,7 +333,7 @@ async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TY
     codigo = context.args[0].strip().upper()
     
     if codigo not in GIFTS_GERADOS:
-        return await update.message.reply_text("❌ Gift card inválido ou não encontrada.")
+        return await update.message.reply_text("❌ Gift card inválido ou não encontrado.")
         
     gift = GIFTS_GERADOS[codigo]
     
@@ -400,7 +349,6 @@ async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TY
     
     add_log(user_id, f"🎁 Resgatou Gift Card\n💰 R$ {valor_add:.2f}".replace('.', ',') + "\n✅ Adicionado")
     
-    # Formatando números sem casas malucas
     msg = (
         f"✅ Gift card resgatado com sucesso!\n\n"
         f"💰 Valor adicionado: R$ {valor_add:.0f}\n"
@@ -767,6 +715,13 @@ async def add_estoque_ccauxiliar(update: Update, context: ContextTypes.DEFAULT_T
     add_log(user_id, f"👑 Adicionou item CC AUXILIAR ao estoque")
     await update.message.reply_text(f"✅ <b>CC Auxiliar adicionado com sucesso ao catálogo!</b>\n\n💳 {nome} - R$ {preco:.2f}", parse_mode="HTML")
 
+def gerar_cpf_valido() -> str:
+    cpf = [random.randint(0, 9) for _ in range(9)]
+    for _ in range(2):
+        val = sum([(len(cpf) + 1 - i) * v for i, v in enumerate(cpf)]) % 11
+        cpf.append(0 if val < 2 else 11 - val)
+    return "".join(map(str, cpf))
+
 telegram_app = Application.builder().token(TOKEN).build()
 
 async def expirador_pix(chat_id: int, message_id: int, valor: float, segundos: int = 1800):
@@ -802,7 +757,6 @@ async def gerar_pix_mycash(valor: float, telegram_id: int):
         "Accept": "application/json"
     }
     
-    # Criamos a ID da transação vinculada ao UserID do cliente para reconhecer o pagamento depois
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
     payload = {
@@ -817,7 +771,6 @@ async def gerar_pix_mycash(valor: float, telegram_id: int):
             if response.status_code in [200, 201]:
                 res = response.json()
                 
-                # A API MyCash retorna o copia e cola direto na chave pix_code 
                 pix_code = res.get("pix_code")
                 
                 if pix_code:
@@ -975,7 +928,6 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if dados_pix and "pix_code" in dados_pix:
         pix_code = dados_pix["pix_code"]
         
-        # O QRCode continua sendo desenhado na hora
         qr_img = qrcode.make(pix_code)
         img_buffer = io.BytesIO()
         qr_img.save(img_buffer, format="PNG")
@@ -997,7 +949,6 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_to_message_id=msg_id
         )
 
-        # O expiração de 30 minutos continua intacta
         asyncio.create_task(expirador_pix(
             chat_id=msg_enviada.chat_id,
             message_id=msg_enviada.message_id,
@@ -1689,7 +1640,7 @@ async def botao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await enviar_menu_principal(update, context)
 
 # ==============================================================================
-# FUNÇÃO DO COMANDO DE ESTOQUE (ADMIN DM) - LOTE E DINÂMICO MASSIVO
+# CORREÇÃO BUG / LOTE ESTOQUE MASSIVO E FORMATOS DIVERSIFICADOS
 # ==============================================================================
 async def add_estoque(update, context):
     user_id = update.effective_user.id
@@ -1701,14 +1652,12 @@ async def add_estoque(update, context):
 
     texto_bruto = update.message.text or ""
 
-    # Remover o comando da string
     texto_bruto = re.sub(r"^/add_estoque_ccfullldados\s*", "", texto_bruto, flags=re.IGNORECASE)
     texto_bruto = re.sub(r"^/add_estoque\s*", "", texto_bruto, flags=re.IGNORECASE)
     
-    # Limpando caso o usuário cole com "=== ESTOQUE ==="
-    texto_limpo = texto_bruto.replace("=== ESTOQUE ===", "")
+    # Limpa ambos os formatos de separador fornecidos pelo usuário
+    texto_limpo = texto_bruto.replace("=== ESTOQUE ===", "").replace("=== ESTOCO ===", "")
     
-    # Dividir texto massivo usando a string "Número do Cartão:"
     chunks = re.split(r"(?i)Número do Cartão:", texto_limpo)
     
     blocos = []
@@ -1729,15 +1678,19 @@ async def add_estoque(update, context):
         try:
             cartao_match = re.search(r"Número do Cartão:\s*([^\n]+)", bloco, re.IGNORECASE)
             banco_match = re.search(r"Banco:\s*([^\n]+)", bloco, re.IGNORECASE)
-            
             categoria_match = re.search(r"Categoria:\s*([^\n]+)", bloco, re.IGNORECASE)
-            categoria_final = categoria_match.group(1).strip().upper() if categoria_match else "STANDARD"
-
             tipo_match = re.search(r"Tipo:\s*([^\n]+)", bloco, re.IGNORECASE)
             nome_match = re.search(r"Nome:\s*([^\n]+)", bloco, re.IGNORECASE)
             cpf_match = re.search(r"CPF:\s*([^\n]+)", bloco, re.IGNORECASE)
+            
+            # Reconhecimento amplo para Score/Pontuação
+            score_serasa_match = re.search(r"(?:Score|Pontua[çc][ãa]o)\s*Serasa:\s*(\d+)", bloco, re.IGNORECASE)
+            score_bc_match = re.search(r"(?:Score\s*BC|Placar\s*a\.C\.)\s*:\s*(\d+)", bloco, re.IGNORECASE)
+            
             preco_match = re.search(r"Valor da Compra:\s*R\$\s*([\d\,\.]+)", bloco, re.IGNORECASE)
-            saldo_match = re.search(r"Saldo mínimo garantido:\s*R\$\s*([\d\,\.]+)", bloco, re.IGNORECASE)
+            saldo_match = re.search(r"Saldo m[íi]nimo garantido:\s*R\$\s*([\d\,\.]+)", bloco, re.IGNORECASE)
+
+            categoria_final = categoria_match.group(1).strip().upper() if categoria_match else "STANDARD"
 
             if not cartao_match:
                 com_erro += 1
@@ -1747,16 +1700,21 @@ async def add_estoque(update, context):
             preco_val = float(preco_match.group(1).replace(".", "").replace(",", ".")) if preco_match else 80.0
             saldo_val = float(saldo_match.group(1).replace(".", "").replace(",", ".")) if saldo_match else 1200.0
 
+            serasa_val = int(score_serasa_match.group(1)) if score_serasa_match else random.randint(100, 900)
+            bc_val = int(score_bc_match.group(1)) if score_bc_match else random.randint(100, 900)
+
             card_raw = {
                 "id": f"card_{len(DADOS_CARTOES) + 1}_{random.randint(1000,9999)}",
                 "cc": cartao_match.group(1).strip(),
                 "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
-                "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
+                "nivel": categoria_final,
                 "categoria": categoria_final,
                 "categoria_produto": categoria_final, 
                 "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
                 "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
                 "cpf": cpf_match.group(1).strip() if cpf_match else "",
+                "score_serasa": serasa_val,
+                "score_bc": bc_val,
                 "preco": preco_val,
                 "saldo_minimo": saldo_val,
                 "vendido": False
