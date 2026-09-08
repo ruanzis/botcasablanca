@@ -42,9 +42,10 @@ CAPA_PATH = "capa.jpg"
 
 THUMB_CARD_URL = "https://i.postimg.cc/9Fdfb4MV/Design-sem-nome.png"
 
-# Novas Configurações da VexaPay
+# Credenciais ÚNICAS do VexaPay
 VEXAPAY_CLIENT_ID = os.getenv("VEXAPAY_CLIENT_ID", "vxp_957ce1bc70f5b34785933ea1")
-VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_bef6e771277f3b51b93d12508cb68626b4cfc71d106e57b9")
+VEXAPAY_CLIENT_SECRET = os.getenv("VEXAPAY_CLIENT_SECRET", "vxs_84c0a764791906cb78399aad4e7d7590262b7493ea07a793")
+VEXAPAY_WEBHOOK_SECRET = os.getenv("VEXAPAY_WEBHOOK_SECRET", "vwh_4535956030642e92d2bfae361946d62857f38c06b174286f")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://botcasablanca.onrender.com")
 
 ADMIN_ID = 7536040475
@@ -65,7 +66,7 @@ USUARIOS_REGISTRADOS = set()
 KEYS_GERADAS = {}        # {codigo: dados}
 GIFTS_GERADOS = {}       # NOVA FUNCIONALIDADE: {codigo: dados_gift}
 PREVIEW_NOTIFICACAO = {} # Variável global para a IA do notificar
-LOGS_ATIVIDADES = []     # NOVA FUNCIONALIDADE: Logs de atividades globais
+LOGS_ATIVIDADES = []     # Logs de atividades globais
 
 # Função para adicionar logs em tempo real
 def add_log(user_id, text):
@@ -205,27 +206,6 @@ def identificar_banco_por_bin(bin_code: str) -> str:
     else:
         return "BANCO DESCONHECIDO"
 
-def identificar_nivel(categoria_raw: str) -> str:
-    cat = str(categoria_raw).upper().strip()
-    if "BLACK" in cat:
-        return "BLACK"
-    elif "INFINITE" in cat:
-        return "INFINITE"
-    elif "PLATINUM" in cat:
-        return "PLATINUM"
-    elif "GOLD" in cat or "OURO" in cat:
-        return "GOLD"
-    elif "STANDARD" in cat:
-        return "STANDARD"
-    elif "CLASSIC" in cat:
-        return "CLASSIC"
-    elif "BUSINESS" in cat:
-        return "BUSINESS"
-    elif "ELO" in cat:
-        return "ELO"
-    else:
-        return cat if cat else "STANDARD"
-
 def edificar_item_estoque(card_raw: dict) -> dict:
     cc_bruto = card_raw.get("cc", "")
     bin_extraida = identificar_bin(cc_bruto)
@@ -328,7 +308,7 @@ async def comando_gerar_gift(update: Update, context: ContextTypes.DEFAULT_TYPE)
     quantidade = int(qtd_match.group(1)) if qtd_match else 1
 
     letras_num = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    codigo = "".join(random.choices(letras_num, k=7)) # Ex: P0L8340
+    codigo = "".join(random.choices(letras_num, k=7))
     
     GIFTS_GERADOS[codigo] = {
         "valor": valor,
@@ -356,7 +336,7 @@ async def comando_resgatar_gift(update: Update, context: ContextTypes.DEFAULT_TY
     codigo = context.args[0].strip().upper()
     
     if codigo not in GIFTS_GERADOS:
-        return await update.message.reply_text("❌ Gift card inválido ou não encontrada.")
+        return await update.message.reply_text("❌ Gift card inválido ou não encontrado.")
         
     gift = GIFTS_GERADOS[codigo]
     
@@ -738,14 +718,14 @@ async def add_estoque_ccauxiliar(update: Update, context: ContextTypes.DEFAULT_T
     add_log(user_id, f"👑 Adicionou item CC AUXILIAR ao estoque")
     await update.message.reply_text(f"✅ <b>CC Auxiliar adicionado com sucesso ao catálogo!</b>\n\n💳 {nome} - R$ {preco:.2f}", parse_mode="HTML")
 
-telegram_app = Application.builder().token(TOKEN).build()
-
 def gerar_cpf_valido() -> str:
     cpf = [random.randint(0, 9) for _ in range(9)]
     for _ in range(2):
         val = sum([(len(cpf) + 1 - i) * v for i, v in enumerate(cpf)]) % 11
         cpf.append(0 if val < 2 else 11 - val)
     return "".join(map(str, cpf))
+
+telegram_app = Application.builder().token(TOKEN).build()
 
 async def expirador_pix(chat_id: int, message_id: int, valor: float, segundos: int = 1800):
     await asyncio.sleep(segundos)
@@ -770,15 +750,15 @@ async def anti_sleep_ping():
                 pass
 
 # ==============================================================================
-# NOVA INTEGRAÇÃO VEXAPAY (Chamada Direta e Robusta)
+# INTEGRAÇÃO VEXAPAY EXCLUSIVA E DEFINITIVA
 # ==============================================================================
 async def gerar_pix_vexapay(valor: float, telegram_id: int, nome_usuario: str):
     url = "https://vexapay.site/api/v1/charges"
     headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
         "Authorization": f"Bearer {VEXAPAY_CLIENT_SECRET.strip()}",
-        "X-Client-Id": VEXAPAY_CLIENT_ID.strip()
+        "X-Client-Id": VEXAPAY_CLIENT_ID.strip(),
+        "Content-Type": "application/json",
+        "Accept": "application/json",
     }
     transaction_id = f"tx_{telegram_id}_{int(time.time())}"
 
@@ -954,7 +934,6 @@ async def comando_pix(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     add_log(user_id, f"💳 Gerou QR Code Pix (R$ {valor:.2f})".replace('.', ','))
     
-    # Integração com a nova Gateway VexaPay
     dados_pix = await gerar_pix_vexapay(valor, user_id, user.first_name)
     
     if dados_pix and "pix_code" in dados_pix:
@@ -1734,8 +1713,8 @@ async def add_estoque(update, context):
                 "cc": cartao_match.group(1).strip(),
                 "banco": banco_match.group(1).strip() if banco_match else "DESCONHECIDO",
                 "nivel": nivel_match.group(1).strip() if nivel_match else "STANDARD",
-                "categoria": categoria_final,  
-                "categoria_produto": categoria_final, 
+                "categoria": categoria_final,
+                "categoria_produto": categoria_final,
                 "tipo": tipo_match.group(1).strip() if tipo_match else "CREDIT",
                 "nome": nome_match.group(1).strip() if nome_match else "NÃO INFORMADO",
                 "cpf": cpf_match.group(1).strip() if cpf_match else "",
