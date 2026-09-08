@@ -253,7 +253,36 @@ def edificar_item_estoque(card_raw: dict) -> dict:
         "vendido": card_raw.get("vendido", False),
     }
 
-ESTOQUE_BRUTO = []
+ESTOQUE_BRUTO = [
+    {
+        "id": "card_1",
+        "cc": "542819******0150|08|2028|306",
+        "categoria": "PLATINUM",
+        "tipo": "CREDIT",
+        "nome": "CRISTIANO CACHEIRO MAHIA",
+        "cpf": "03250698679",
+        "score_serasa": 496,
+        "score_bc": 352,
+        "fornecedor": "Anon",
+        "preco": 80.00,
+        "saldo_minimo": 1200.00,
+        "vendido": False,
+    },
+    {
+        "id": "card_2",
+        "cc": "544169******0487|05|2029|931",
+        "categoria": "PLATINUM",
+        "tipo": "CREDIT",
+        "nome": "ALEXANDRE CARVALHO CHANAN",
+        "cpf": "18319050006",
+        "score_serasa": 712,
+        "score_bc": 540,
+        "fornecedor": "Anon",
+        "preco": 80.00,
+        "saldo_minimo": 1200.00,
+        "vendido": False,
+    },
+]
 DADOS_CARTOES = [edificar_item_estoque(item) for item in ESTOQUE_BRUTO]
 CATALOGO_UNITARIAS = []
 
