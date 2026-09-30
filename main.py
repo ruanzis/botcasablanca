@@ -856,18 +856,36 @@ async def esta_no_canal(context: ContextTypes.DEFAULT_TYPE, user_id: int):
 
 # --- FUNÇÃO AUXILIAR SEGURA PARA ATUALIZAR TELA ---
 async def responder_ou_editar(query, texto, reply_markup, parse_mode="HTML"):
+    chat_id = query.message.chat_id if query.message else query.from_user.id
     try:
-        if query.message.photo:
-            await query.message.delete()
-            await query.message.chat.send_message(text=texto, reply_markup=reply_markup, parse_mode=parse_mode)
+        if query.message and query.message.photo:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await telegram_app.bot.send_message(
+                chat_id=chat_id,
+                text=texto,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
         else:
-            await query.message.edit_text(text=texto, reply_markup=reply_markup, parse_mode=parse_mode)
+            await query.message.edit_text(
+                text=texto,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
     except Exception as e:
-        logger.warning(f"Erro ao editar/enviar mensagem: {e}")
+        logger.warning(f"Erro ao responder_ou_editar: {e}")
         try:
-            await query.message.chat.send_message(text=texto, reply_markup=reply_markup, parse_mode=parse_mode)
-        except Exception:
-            pass
+            await telegram_app.bot.send_message(
+                chat_id=chat_id,
+                text=texto,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
+        except Exception as err:
+            logger.error(f"Erro ao enviar mensagem fallback: {err}")
 
 async def enviar_menu_principal(update: Update, context: ContextTypes.DEFAULT_TYPE, reply_to_id: int = None):
     user = update.effective_user
