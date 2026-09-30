@@ -859,23 +859,13 @@ async def responder_ou_editar(query, texto, reply_markup, parse_mode="HTML"):
     try:
         if query.message.photo:
             await query.message.delete()
-            await query.get_bot().send_message(
-                chat_id=query.message.chat_id, 
-                text=texto, 
-                reply_markup=reply_markup, 
-                parse_mode=parse_mode
-            )
+            await query.message.chat.send_message(text=texto, reply_markup=reply_markup, parse_mode=parse_mode)
         else:
             await query.message.edit_text(text=texto, reply_markup=reply_markup, parse_mode=parse_mode)
     except Exception as e:
         logger.warning(f"Erro ao editar/enviar mensagem: {e}")
         try:
-            await query.get_bot().send_message(
-                chat_id=query.message.chat_id, 
-                text=texto, 
-                reply_markup=reply_markup, 
-                parse_mode=parse_mode
-            )
+            await query.message.chat.send_message(text=texto, reply_markup=reply_markup, parse_mode=parse_mode)
         except Exception:
             pass
 
