@@ -10,6 +10,10 @@ from fastapi import FastAPI, Request
 import qrcode
 import httpx
 import uvicorn
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
+DATABASE_URL = os.getenv("DATABASE_URL")
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -34,7 +38,52 @@ logger = logging.getLogger(__name__)
 # Configurações de Ambiente
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8956870259:AAGR_gmp5h2pzwdYnqC_QScrigH8imPVoho")
 ID_CANAL = os.getenv("ID_CANAL", "@oficialharidade")
+# Conexão com o Neon PostgreSQL
+DATABASE_URL = os.getenv("DATABASE_URL")
 
+def get_db():
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
+
+def init_db():
+    if not DATABASE_URL:
+        return
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # Tabela de Cartões
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS estoque_cartoes (
+                    id TEXT PRIMARY KEY,
+                    cc_full TEXT,
+                    cc_mascarado TEXT,
+                    bin TEXT,
+                    banco TEXT,
+                    bandeira TEXT,
+                    categoria TEXT,
+                    tipo TEXT,
+                    nome TEXT,
+                    cpf TEXT,
+                    score_serasa INT,
+                    score_bc INT,
+                    preco NUMERIC,
+                    saldo_minimo NUMERIC,
+                    fornecedor TEXT,
+                    vendido BOOLEAN DEFAULT FALSE
+                );
+            """)
+            # Tabela de Usuários / Saldos
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    user_id BIGINT PRIMARY KEY,
+                    saldo NUMERIC DEFAULT 0.0
+                );
+            """)
+            conn.commit()
+
+# Executa a criação das tabelas no Neon
+try:
+    init_db()
+except Exception as e:
+    logger.error(f"Erro ao conectar com Neon: {e}")
 LINK_CANAL_VERIFICACAO = "https://t.me/oficialharidade"
 LINK_CANAL = os.getenv("LINK_CANAL", "https://t.me/+qrh5SObhV3xmODhh")
 LINK_SUPORTE = "https://t.me/haridadenetwork"
@@ -152,9 +201,21 @@ CATALOGO_LARAS = [
     }
 ]
 
-CATALOGO_CONSULTAVEL = []
-CATALOGO_LOGINS = []
-CATALOGO_CCAUXILIAR = []
+def carregar_estoque_neon():
+    if not DATABASE_URL:
+        return []
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT * FROM estoque_cartoes WHERE vendido = FALSE;")
+                registros = cur.fetchall()
+                return [dict(r) for r in registros]
+    except Exception as e:
+        logger.error(f"Erro ao carregar estoque: {e}")
+        return []
+
+# Inicializa carregando os dados salvos no Neon
+DADOS_CARTOES = carregar_estoque_neon()
 
 # --- MOTOR DE AUTOMAÇÃO E EDIFICAÇÃO DE ESTOQUE ---
 
@@ -798,13 +859,23 @@ async def responder_ou_editar(query, texto, reply_markup, parse_mode="HTML"):
     try:
         if query.message.photo:
             await query.message.delete()
-            await query.message.chat.send_message(text=texto, reply_markup=reply_markup, parse_mode=parse_mode)
+            await query.get_bot().send_message(
+                chat_id=query.message.chat_id, 
+                text=texto, 
+                reply_markup=reply_markup, 
+                parse_mode=parse_mode
+            )
         else:
             await query.message.edit_text(text=texto, reply_markup=reply_markup, parse_mode=parse_mode)
     except Exception as e:
         logger.warning(f"Erro ao editar/enviar mensagem: {e}")
         try:
-            await query.message.chat.send_message(text=texto, reply_markup=reply_markup, parse_mode=parse_mode)
+            await query.get_bot().send_message(
+                chat_id=query.message.chat_id, 
+                text=texto, 
+                reply_markup=reply_markup, 
+                parse_mode=parse_mode
+            )
         except Exception:
             pass
 
@@ -1722,7 +1793,26 @@ async def add_estoque(update, context):
 
             item_processado = edificar_item_estoque(card_raw)
             DADOS_CARTOES.append(item_processado)
-            
+            # Salva diretamente no Neon
+            if DATABASE_URL:
+                try:
+                    with get_db() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                INSERT INTO estoque_cartoes 
+                                (id, cc_full, cc_mascarado, bin, banco, bandeira, categoria, tipo, nome, cpf, score_serasa, score_bc, preco, saldo_minimo, fornecedor, vendido)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT (id) DO NOTHING;
+                            """, (
+                                item_processado["id"], item_processado["cc_full"], item_processado["cc_mascarado"],
+                                item_processado["bin"], item_processado["banco"], item_processado["bandeira"],
+                                item_processado["categoria"], item_processado["tipo"], item_processado["nome"],
+                                item_processado["cpf"], item_processado["score_serasa"], item_processado["score_bc"],
+                                item_processado["preco"], item_processado["saldo_minimo"], item_processado["fornecedor"], False
+                            ))
+                            conn.commit()
+                except Exception as db_err:
+                    logger.error(f"Erro ao salvar no Neon: {db_err}")
             adicionados += 1
 
         except Exception as e:
